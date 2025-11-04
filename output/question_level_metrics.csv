@@ -1,0 +1,21 @@
+question,question_type,vignette_class,n_physicians,percentage_agreement,fleiss_kappa,decision_medevac,decision_commercial,decision_remain
+1,Clear Medevac,A,20,1.0,,20,0,0
+2,Clear Not Medevac,A,20,0.33157894736842103,0.2125984251968504,4,9,7
+3,Any Option,C,20,0.6631578947368421,1.0,4,0,16
+4,Clear Medevac,A,20,0.9,1.0,19,0,1
+5,Clear Not Medevac,B,20,0.6052631578947368,1.0,0,15,5
+6,Clear Not Medevac,B,20,0.32105263157894737,0.2248062015503876,5,9,6
+7,Clear Not Remain,B,20,0.9,1.0,19,1,0
+8,Clear Remain,A,20,0.6473684210526316,-0.49253731343283647,1,3,16
+9,Clear Commercial,A,20,0.6052631578947368,1.0,0,15,5
+10,Clear Not Remain,B,20,0.5578947368421052,1.0,14,6,0
+11,Clear Remain,A,20,0.6052631578947368,1.0,0,5,15
+12,Any Option,C,20,0.3526315789473684,0.1869918699186991,9,8,3
+13,Clear Medevac,A,20,1.0,,20,0,0
+14,Clear Not Medevac,B,20,0.6631578947368421,1.0,0,4,16
+15,Clear Commercial,A,20,0.48947368421052634,-0.03092783505154642,13,6,1
+16,Conflict Between Physiology/Logistics,D,20,0.6052631578947368,1.0,15,0,5
+17,Conflict Between Physiology/Logistics,D,20,0.47368421052631576,1.0,10,0,10
+18,Conflict Between Physiology/Logistics,D,20,0.6052631578947368,1.0,5,0,15
+19,Clear Medevac,A,20,1.0,,20,0,0
+20,Any Option,C,20,0.46842105263157896,0.009900990099009802,13,5,2

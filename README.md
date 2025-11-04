@@ -1,6 +1,19 @@
-# Medevac Interrater Project
+# Medevac Interrater Reliability Analysis
 
-A Python project for interrater reliability analysis in medical evacuation data.
+A Python project for analyzing interrater reliability in physician medevac decision-making using standardized clinical vignettes.
+
+## 📊 Study Overview
+
+This project analyzes agreement between 20 physicians evaluating 20 standardized patient vignettes. Each physician selects one of three management options:
+- **Medevac** (immediate medical evacuation)
+- **Commercial** (next available commercial flight)
+- **Remain** (remain in village for observation/treatment)
+
+Vignettes are classified into four categories:
+- **Class A**: Clear cases (expected high agreement)
+- **Class B**: Clear not-X cases (expected high agreement)
+- **Class C**: Any option acceptable (expected lower agreement)
+- **Class D**: Conflict between physiology/logistics (expected lower agreement)
 
 ## 🚀 Quick Start
 
@@ -32,12 +45,31 @@ A Python project for interrater reliability analysis in medical evacuation data.
 # Activate virtual environment
 source .venv/bin/activate
 
+# Run the analysis
+python scripts/run_analysis.py
+
+# Explore the data
+python scripts/explore_data.py
+
 # Run tests
 pytest
-
-# Run scripts
-python scripts/your_script.py
 ```
+
+## 📈 Analysis Output
+
+The analysis generates several output files in the `output/` directory:
+
+- `cleaned_data_long.csv`: Reshaped data in long format (physician × question)
+- `question_level_metrics.csv`: Agreement metrics for each of the 20 questions
+- `class_level_metrics.csv`: Agreement metrics aggregated by vignette class
+- `confidence_by_decision.csv`: Confidence ratings by decision type
+- `confidence_by_class.csv`: Confidence ratings by vignette class
+
+## 🔬 Analysis Methods
+
+- **Percentage Agreement**: Simple agreement between all physician pairs
+- **Fleiss' Kappa**: Interrater reliability metric for multiple raters (accounts for chance agreement)
+- **Confidence Analysis**: Relationship between confidence ratings and agreement
 
 ## 📁 Project Structure
 
