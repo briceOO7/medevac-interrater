@@ -169,12 +169,11 @@ chars <- c(chars, "",
            "",
            "**Years in Practice**",
            "  Median [IQR]",
-           "  Mean (SD)",
            "  Range",
            "",
            "**Confidence (1-10 scale)**",
-           "  Mean (SD)",
            "  Median [IQR]",
+           "  Range",
            "",
            "**Medevac Selection**",
            "  Overall % Choosing Medevac",
@@ -192,19 +191,18 @@ vals <- c(vals, "",
                   median(physician_summary$years_experience),
                   quantile(physician_summary$years_experience, 0.25),
                   quantile(physician_summary$years_experience, 0.75)),
-          sprintf("%.1f (%.1f)", mean(physician_summary$years_experience), 
-                  sd(physician_summary$years_experience)),
           sprintf("%d - %d years", 
                   min(physician_summary$years_experience),
                   max(physician_summary$years_experience)),
           "",
           "",
-          sprintf("%.1f (%.1f)", mean(data$confidence, na.rm = TRUE), 
-                  sd(data$confidence, na.rm = TRUE)),
           sprintf("%.0f [%.0f - %.0f]", 
                   median(data$confidence, na.rm = TRUE),
                   quantile(data$confidence, 0.25, na.rm = TRUE),
                   quantile(data$confidence, 0.75, na.rm = TRUE)),
+          sprintf("%.0f - %.0f", 
+                  min(data$confidence, na.rm = TRUE),
+                  max(data$confidence, na.rm = TRUE)),
           "",
           "",
           sprintf("%.1f%%", 100 * mean(data$chose_medevac)),
@@ -337,7 +335,9 @@ vignette_desc <- data %>%
     pct_medevac = 100 * sum(decision == "Medevac") / n,
     pct_commercial = 100 * sum(decision == "Commercial") / n,
     pct_remain = 100 * sum(decision == "Remain") / n,
-    mean_confidence = mean(confidence, na.rm = TRUE),
+    median_confidence = median(confidence, na.rm = TRUE),
+    q25_confidence = quantile(confidence, 0.25, na.rm = TRUE),
+    q75_confidence = quantile(confidence, 0.75, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(
@@ -365,7 +365,9 @@ vignette_desc <- data %>%
       modal_decision == "Medevac" ~ pct_medevac,
       modal_decision == "Commercial" ~ pct_commercial,
       modal_decision == "Remain" ~ pct_remain
-    )
+    ),
+    # Format confidence for display
+    conf_display = sprintf("%.0f [%.0f-%.0f]", median_confidence, q25_confidence, q75_confidence)
   )
 
 # Calculate Gwet's AC1 for each vignette (FIXED - using approach from final_report)
@@ -436,8 +438,14 @@ ac1_by_vignette <- data %>%
 vignette_desc <- vignette_desc %>%
   left_join(ac1_by_vignette, by = "question")
 
-# Create display table
+# Create display table with proper ordering
 table2_display <- vignette_desc %>%
+  # Arrange by medevac_status_label to ensure proper grouping
+  arrange(factor(medevac_status_label, 
+                 levels = c("Medevac Only Wrong", "Medevac One of Two Wrong",
+                           "Ambiguous (All Plausible)", "Medevac One of Two Correct",
+                           "Medevac Only Correct")),
+          question) %>%
   select(
     `Vignette Type` = vignette_type,
     `Q#` = question,
@@ -448,15 +456,26 @@ table2_display <- vignette_desc %>%
     `Agreement %` = agreement_pct,
     `Gwet's AC1` = gwet_ac1,
     Interpretation = ac1_interpretation,
-    `Mean Conf.` = mean_confidence,
+    `Median Conf. [IQR]` = conf_display,
     # Keep medevac_status_label for grouping
     medevac_status = medevac_status_label
   )
 
-kable(table2_display %>% select(-medevac_status),
+# Calculate row indices for each group
+row_groups <- table2_display %>%
+  mutate(row_num = row_number()) %>%
+  group_by(medevac_status) %>%
+  summarise(
+    start = min(row_num),
+    end = max(row_num),
+    .groups = "drop"
+  )
+
+# Create base table
+table2_kable <- kable(table2_display %>% select(-medevac_status),
       caption = "Table 2: Descriptive Statistics by Vignette",
-      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r"),
-      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 1)) %>%
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "l"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 0)) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"),
     full_width = FALSE,
@@ -465,27 +484,21 @@ kable(table2_display %>% select(-medevac_status),
   column_spec(1, bold = TRUE) %>%
   column_spec(7, bold = TRUE,
               color = ifelse(table2_display$`Agreement %` >= 75, "darkgreen",
-                           ifelse(table2_display$`Agreement %` >= 50, "orange", "red"))) %>%
-  pack_rows("Medevac Only Wrong", 
-            min(which(table2_display$medevac_status == "Medevac Only Wrong")),
-            max(which(table2_display$medevac_status == "Medevac Only Wrong"))) %>%
-  pack_rows("Medevac One of Two Wrong", 
-            min(which(table2_display$medevac_status == "Medevac One of Two Wrong")),
-            max(which(table2_display$medevac_status == "Medevac One of Two Wrong"))) %>%
-  pack_rows("Ambiguous (All Plausible)", 
-            min(which(table2_display$medevac_status == "Ambiguous (All Plausible)")),
-            max(which(table2_display$medevac_status == "Ambiguous (All Plausible)"))) %>%
-  pack_rows("Medevac One of Two Correct", 
-            min(which(table2_display$medevac_status == "Medevac One of Two Correct")),
-            max(which(table2_display$medevac_status == "Medevac One of Two Correct"))) %>%
-  pack_rows("Medevac Only Correct", 
-            min(which(table2_display$medevac_status == "Medevac Only Correct")),
-            max(which(table2_display$medevac_status == "Medevac Only Correct")))
+                           ifelse(table2_display$`Agreement %` >= 50, "orange", "red")))
+
+# Add pack_rows for each group
+for (i in 1:nrow(row_groups)) {
+  group_name <- as.character(row_groups$medevac_status[i])
+  table2_kable <- table2_kable %>%
+    pack_rows(group_name, row_groups$start[i], row_groups$end[i])
+}
+
+table2_kable
 ```
 
 **Table 2 Notes:**
 - **Gwet's AC1**: Chance-corrected agreement statistic (robust to prevalence)
-- **Mean Conf.**: Average confidence rating (1-10 scale)
+- **Median Conf. [IQR]**: Median confidence rating with interquartile range (1-10 scale)
 - Vignettes grouped by vignette type (matching Table 1 classification)
 
 ---
