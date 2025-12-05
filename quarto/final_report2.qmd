@@ -236,23 +236,42 @@ kable(summary_stats,
 # Figure 1: Response Distribution by Physician
 
 ```{r create-physician-letter-mapping}
-# Create random letter assignment for physicians (A-Z)
-# Set seed for reproducibility
-set.seed(42)
+# Create experience quartile-based labeling for physicians
+# Get unique physicians with their experience
+physician_exp <- data %>%
+  distinct(physician_id, years_experience) %>%
+  arrange(years_experience)
 
-# Get all unique physician IDs
-all_physician_ids <- sort(unique(data$physician_id))
+# Calculate experience quartiles
+exp_quartiles <- quantile(physician_exp$years_experience, probs = c(0, 0.25, 0.5, 0.75, 1.0))
 
-# Create random letter assignment (A-Z)
-letters_available <- LETTERS[1:length(all_physician_ids)]
-random_letters <- sample(letters_available, length(all_physician_ids), replace = FALSE)
+# Assign quartile labels and sequential numbers within each quartile
+physician_letter_map <- physician_exp %>%
+  mutate(
+    quartile = cut(years_experience,
+                   breaks = exp_quartiles,
+                   labels = c("A", "B", "C", "D"),
+                   include.lowest = TRUE)
+  ) %>%
+  group_by(quartile) %>%
+  mutate(
+    quartile_num = row_number(),
+    physician_letter = paste0(quartile, quartile_num)
+  ) %>%
+  ungroup() %>%
+  select(physician_id, physician_letter, quartile, years_experience)
 
-# Create mapping dataframe
-physician_letter_map <- data.frame(
-  physician_id = all_physician_ids,
-  physician_letter = random_letters,
-  stringsAsFactors = FALSE
+# Store quartile ranges for legend
+quartile_ranges <- data.frame(
+  quartile = c("A", "B", "C", "D"),
+  range_text = c(
+    sprintf("A = %.0f-%.0f years", floor(exp_quartiles[1]), floor(exp_quartiles[2])),
+    sprintf("B = %.0f-%.0f years", floor(exp_quartiles[2])+1, floor(exp_quartiles[3])),
+    sprintf("C = %.0f-%.0f years", floor(exp_quartiles[3])+1, floor(exp_quartiles[4])),
+    sprintf("D = %.0f-%.0f years", floor(exp_quartiles[4])+1, ceiling(exp_quartiles[5]))
+  )
 )
+legend_text <- paste(quartile_ranges$range_text, collapse = ", ")
 ```
 
 ```{r figure1-physician-horizontal}
@@ -323,8 +342,10 @@ ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
     legend.title = element_text(size = 11, face = "bold"),
     legend.text = element_text(size = 10),
     panel.grid.major.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, hjust = 0)
+  ) +
+  labs(caption = paste("Physician labels indicate experience quartile:", legend_text))
 ```
 
 ---
