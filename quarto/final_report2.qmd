@@ -223,11 +223,7 @@ chars <- c(chars, "",
            "  100% Agreement",
            "  75-99% Agreement",
            "  50-74% Agreement",
-           "  <50% Agreement",
-           "",
-           "**Medevac Selection**",
-           "  Overall % Choosing Medevac",
-           "  Range Across Physicians")
+           "  <50% Agreement")
 
 vals <- c(vals, "",
           "",
@@ -269,13 +265,7 @@ vals <- c(vals, "",
           sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "50-74%"), 
                                           agreement_categories$n[agreement_categories$agreement_cat == "50-74%"], 0)),
           sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "<50%"), 
-                                          agreement_categories$n[agreement_categories$agreement_cat == "<50%"], 0)),
-          "",
-          "",
-          sprintf("%.1f%%", 100 * mean(data$chose_medevac)),
-          sprintf("%.1f%% - %.1f%%", 
-                  min(physician_summary$pct_medevac),
-                  max(physician_summary$pct_medevac)))
+                                          agreement_categories$n[agreement_categories$agreement_cat == "<50%"], 0)))
 
 summary_stats <- data.frame(
   Characteristic = chars,
