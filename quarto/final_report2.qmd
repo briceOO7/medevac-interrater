@@ -186,16 +186,37 @@ physician_summary <- data %>%
   )
 
 # Build comprehensive table manually to avoid mismatch
+# New order: Physicians, Years in Practice, Vignettes, Total Responses, Inter-Rater, Confidence
 chars <- c(
+  "**Physicians**",
+  "  Total Physicians",
+  "",
+  "**Years in Practice**",
+  "  Median [IQR]",
+  "  Range",
+  "",
   "**Vignettes**",
   "  Total Vignettes"
 )
+
 vals <- c(
+  "",
+  as.character(length(unique(data$physician_id))),
+  "",
+  "",
+  sprintf("%.0f [%.0f - %.0f]", 
+          median(physician_summary$years_experience),
+          quantile(physician_summary$years_experience, 0.25),
+          quantile(physician_summary$years_experience, 0.75)),
+  sprintf("%d - %d years", 
+          min(physician_summary$years_experience),
+          max(physician_summary$years_experience)),
+  "",
   "",
   as.character(length(unique(data$question)))
 )
 
-# Add normative counts
+# Add vignette normative counts
 for(i in 1:nrow(normative_counts)) {
   chars <- c(chars, paste0("  ", normative_counts$medevac_status_label[i]))
   vals <- c(vals, sprintf("%d", normative_counts$n[i]))
@@ -203,19 +224,8 @@ for(i in 1:nrow(normative_counts)) {
 
 # Add rest
 chars <- c(chars, "",
-           "**Physicians**",
-           "  Total Physicians",
-           "",
            "**Responses**",
            "  Total Responses",
-           "",
-           "**Years in Practice**",
-           "  Median [IQR]",
-           "  Range",
-           "",
-           "**Confidence (1-10 scale)**",
-           "  Median [IQR]",
-           "  Range",
            "",
            "**Inter-Rater Agreement by Vignette**",
            "  Median [IQR]",
@@ -223,32 +233,15 @@ chars <- c(chars, "",
            "  100% Agreement",
            "  75-99% Agreement",
            "  50-74% Agreement",
-           "  <50% Agreement")
+           "  <50% Agreement",
+           "",
+           "**Confidence (1-10 scale)**",
+           "  Median [IQR]",
+           "  Range")
 
 vals <- c(vals, "",
           "",
-          as.character(length(unique(data$physician_id))),
-          "",
-          "",
           as.character(nrow(data)),
-          "",
-          "",
-          sprintf("%.0f [%.0f - %.0f]", 
-                  median(physician_summary$years_experience),
-                  quantile(physician_summary$years_experience, 0.25),
-                  quantile(physician_summary$years_experience, 0.75)),
-          sprintf("%d - %d years", 
-                  min(physician_summary$years_experience),
-                  max(physician_summary$years_experience)),
-          "",
-          "",
-          sprintf("%.0f [%.0f - %.0f]", 
-                  median(data$confidence, na.rm = TRUE),
-                  quantile(data$confidence, 0.25, na.rm = TRUE),
-                  quantile(data$confidence, 0.75, na.rm = TRUE)),
-          sprintf("%.0f - %.0f", 
-                  min(data$confidence, na.rm = TRUE),
-                  max(data$confidence, na.rm = TRUE)),
           "",
           "",
           sprintf("%.1f%% [%.1f%% - %.1f%%]", 
@@ -265,7 +258,16 @@ vals <- c(vals, "",
           sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "50-74%"), 
                                           agreement_categories$n[agreement_categories$agreement_cat == "50-74%"], 0)),
           sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "<50%"), 
-                                          agreement_categories$n[agreement_categories$agreement_cat == "<50%"], 0)))
+                                          agreement_categories$n[agreement_categories$agreement_cat == "<50%"], 0)),
+          "",
+          "",
+          sprintf("%.0f [%.0f - %.0f]", 
+                  median(data$confidence, na.rm = TRUE),
+                  quantile(data$confidence, 0.25, na.rm = TRUE),
+                  quantile(data$confidence, 0.75, na.rm = TRUE)),
+          sprintf("%.0f - %.0f", 
+                  min(data$confidence, na.rm = TRUE),
+                  max(data$confidence, na.rm = TRUE)))
 
 summary_stats <- data.frame(
   Characteristic = chars,
