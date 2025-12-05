@@ -138,6 +138,43 @@ normative_counts <- data %>%
                             "Ambiguous (All Plausible)", "Medevac One of Two Correct",
                             "Medevac Only Correct")))
 
+# Calculate agreement statistics by vignette
+agreement_by_vignette <- data %>%
+  group_by(question) %>%
+  summarise(
+    n = n(),
+    pct_medevac = 100 * sum(decision == "Medevac") / n,
+    pct_commercial = 100 * sum(decision == "Commercial") / n,
+    pct_remain = 100 * sum(decision == "Remain") / n,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Find modal decision
+    modal_decision = case_when(
+      pct_medevac >= pct_commercial & pct_medevac >= pct_remain ~ "Medevac",
+      pct_commercial >= pct_medevac & pct_commercial >= pct_remain ~ "Commercial",
+      TRUE ~ "Remain"
+    ),
+    # Calculate agreement percentage (% choosing modal)
+    agreement_pct = case_when(
+      modal_decision == "Medevac" ~ pct_medevac,
+      modal_decision == "Commercial" ~ pct_commercial,
+      modal_decision == "Remain" ~ pct_remain
+    )
+  )
+
+# Categorize vignettes by agreement level
+agreement_categories <- agreement_by_vignette %>%
+  mutate(
+    agreement_cat = case_when(
+      agreement_pct == 100 ~ "100%",
+      agreement_pct >= 75 ~ "75-99%",
+      agreement_pct >= 50 ~ "50-74%",
+      TRUE ~ "<50%"
+    )
+  ) %>%
+  count(agreement_cat)
+
 # Create physician summary statistics
 physician_summary <- data %>%
   group_by(physician_id) %>%
@@ -180,6 +217,14 @@ chars <- c(chars, "",
            "  Median [IQR]",
            "  Range",
            "",
+           "**Inter-Rater Agreement by Vignette**",
+           "  Median [IQR]",
+           "  Range",
+           "  100% Agreement",
+           "  75-99% Agreement",
+           "  50-74% Agreement",
+           "  <50% Agreement",
+           "",
            "**Medevac Selection**",
            "  Overall % Choosing Medevac",
            "  Range Across Physicians")
@@ -208,6 +253,19 @@ vals <- c(vals, "",
           sprintf("%.0f - %.0f", 
                   min(data$confidence, na.rm = TRUE),
                   max(data$confidence, na.rm = TRUE)),
+          "",
+          "",
+          sprintf("%.1f%% [%.1f%% - %.1f%%]", 
+                  median(agreement_by_vignette$agreement_pct),
+                  quantile(agreement_by_vignette$agreement_pct, 0.25),
+                  quantile(agreement_by_vignette$agreement_pct, 0.75)),
+          sprintf("%.1f%% - %.1f%%", 
+                  min(agreement_by_vignette$agreement_pct),
+                  max(agreement_by_vignette$agreement_pct)),
+          sprintf("%d vignettes", sum(agreement_categories$agreement_cat == "100%", na.rm = TRUE)),
+          sprintf("%d vignettes", sum(agreement_categories$agreement_cat == "75-99%", na.rm = TRUE)),
+          sprintf("%d vignettes", sum(agreement_categories$agreement_cat == "50-74%", na.rm = TRUE)),
+          sprintf("%d vignettes", sum(agreement_categories$agreement_cat == "<50%", na.rm = TRUE)),
           "",
           "",
           sprintf("%.1f%%", 100 * mean(data$chose_medevac)),
