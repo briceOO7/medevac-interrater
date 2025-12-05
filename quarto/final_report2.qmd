@@ -268,7 +268,7 @@ quartile_ranges <- data.frame(
     sprintf("A = %.0f-%.0f years", floor(exp_quartiles[1]), floor(exp_quartiles[2])),
     sprintf("B = %.0f-%.0f years", floor(exp_quartiles[2])+1, floor(exp_quartiles[3])),
     sprintf("C = %.0f-%.0f years", floor(exp_quartiles[3])+1, floor(exp_quartiles[4])),
-    sprintf("D = %.0f-%.0f years", floor(exp_quartiles[4])+1, ceiling(exp_quartiles[5]))
+    sprintf("D = %.0f+ years", floor(exp_quartiles[4])+1)
   )
 )
 legend_text <- paste(quartile_ranges$range_text, collapse = ", ")
@@ -343,7 +343,7 @@ ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
     legend.text = element_text(size = 10),
     panel.grid.major.y = element_blank(),
     panel.grid.minor = element_blank(),
-    plot.caption = element_text(size = 9, hjust = 0)
+    plot.caption = element_text(size = 11, hjust = 0.5, face = "bold")
   ) +
   labs(caption = paste("Physician labels indicate experience quartile:", legend_text))
 ```
