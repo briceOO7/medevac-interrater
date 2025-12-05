@@ -639,6 +639,10 @@ or_upper <- exp(fixed_effects + 1.96 * se)
 ## Table 3: Model Results - All Fixed Effects
 
 ```{r table3-model-fixed}
+# Calculate p-values
+z_scores <- fixed_effects / se
+p_values <- 2 * (1 - pnorm(abs(z_scores)))
+
 fixed_table <- data.frame(
   Predictor = c(
     "**Vignette Type**",
@@ -655,10 +659,7 @@ fixed_table <- data.frame(
   OR = c(NA, 1.00, or[2:5], NA, NA, or[6:7]),
   CI_lower = c(NA, NA, or_lower[2:5], NA, NA, or_lower[6:7]),
   CI_upper = c(NA, NA, or_upper[2:5], NA, NA, or_upper[6:7]),
-  p_value = c("", "ref", 
-              ifelse(abs(fixed_effects[2:5] / se[2:5]) > 1.96, "< 0.05", "> 0.05"),
-              "", "", 
-              ifelse(abs(fixed_effects[6:7] / se[6:7]) > 1.96, "< 0.05", "> 0.05"))
+  p_value_raw = c(NA, NA, p_values[2:5], NA, NA, p_values[6:7])
 ) %>%
   mutate(
     OR_display = case_when(
@@ -672,10 +673,18 @@ fixed_table <- data.frame(
       Predictor == "  Medevac Only Wrong (reference)" ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
+    ),
+    p_display = case_when(
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**") ~ "",
+      Predictor == "  Medevac Only Wrong (reference)" ~ "ref",
+      is.na(p_value_raw) ~ "",
+      p_value_raw < 0.001 ~ "<0.001*",
+      p_value_raw < 0.05 ~ sprintf("%.3f*", p_value_raw),
+      TRUE ~ sprintf("%.3f", p_value_raw)
     )
   )
 
-kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_value),
+kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
       col.names = c("Predictor", "Odds Ratio", "95% CI", "P-value"),
       caption = "Table 3: Model Fixed Effects (Vignette Type + Confidence + Experience)",
       align = c("l", "c", "c", "c"),
@@ -684,13 +693,16 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_value),
     bootstrap_options = c("striped", "hover", "condensed"),
     full_width = FALSE,
     position = "left"
-  )
+  ) %>%
+  footnote(general = "* indicates statistically significant (p < 0.05)",
+           general_title = "",
+           footnote_as_chunk = TRUE)
 ```
 
 **Interpretation:**
 
-- **Confidence**: OR = `r sprintf("%.2f", or[6])` per 1-point increase (`r ifelse(abs(fixed_effects[6] / se[6]) > 1.96, "significant", "not significant")`)
-- **Experience**: OR = `r sprintf("%.2f", or[7])` per 1-year increase (`r ifelse(abs(fixed_effects[7] / se[7]) > 1.96, "significant", "not significant")`)
+- **Confidence**: OR = `r sprintf("%.2f", or[6])` per 1-point increase (p = `r ifelse(p_values[6] < 0.001, "<0.001", sprintf("%.3f", p_values[6]))`)
+- **Experience**: OR = `r sprintf("%.2f", or[7])` per 1-year increase (p = `r ifelse(p_values[7] < 0.001, "<0.001", sprintf("%.3f", p_values[7]))`)
 
 ---
 
