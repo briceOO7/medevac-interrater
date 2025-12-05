@@ -337,7 +337,7 @@ ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
     plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
     axis.title = element_text(size = 12, face = "bold"),
     axis.text.x = element_text(size = 10),
-    axis.text.y = element_text(size = 9),
+    axis.text.y = element_text(size = 9, face = "bold"),
     legend.position = "bottom",
     legend.title = element_text(size = 11, face = "bold"),
     legend.text = element_text(size = 10),
