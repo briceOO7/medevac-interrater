@@ -781,8 +781,6 @@ kable(variance_table,
 
 ---
 
-# Figures
-
 ## Figure 3: Physician-Level Variation
 
 ```{r figure3-physician-caterpillar}
