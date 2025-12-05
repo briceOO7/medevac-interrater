@@ -1,0 +1,1706 @@
+---
+title: "Medevac Interrater Reliability Study"
+subtitle: "Final Report"
+author: "Medevac Interrater Study Team"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    fig-width: 10
+    fig-height: 6
+    self-contained: true
+    code-fold: false
+    echo: false
+  pdf:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    fig-width: 10
+    fig-height: 6
+    keep-tex: false
+    echo: false
+    include-in-header:
+      text: |
+        \usepackage{xcolor}
+        \definecolor{darkgreen}{RGB}{0,100,0}
+        \definecolor{orange}{RGB}{255,165,0}
+        \usepackage{pdflscape}
+        \usepackage{rotating}
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(here)
+library(irrCAC)  # For Gwet's AC1
+
+# Load raw survey data to get physician affiliations
+raw_data <- read.csv(here::here("data", "survey_results.csv"), 
+                     stringsAsFactors = FALSE)
+
+# ============================================================================
+# PREPROCESS: Clean up column names
+# ============================================================================
+# Trim long "Question XX: ..." columns to just "Question_XX"
+
+col_names <- names(raw_data)
+
+# Find columns that match "Question X:" or "Question XX:" pattern
+question_cols <- grep("^Question\\.[0-9]+\\.", col_names)
+
+# For each question column, rename it
+for (i in question_cols) {
+  old_name <- col_names[i]
+  # Extract question number
+  question_num <- sub("^Question\\.([0-9]+)\\..*$", "\\1", old_name)
+  # Create new name
+  new_name <- paste0("Question_", question_num)
+  col_names[i] <- new_name
+}
+
+# Also handle confidence columns that follow questions
+confidence_cols <- grep("How\\.confident\\.are\\.you", col_names)
+for (i in seq_along(confidence_cols)) {
+  col_names[confidence_cols[i]] <- paste0("Confidence_", i)
+}
+
+# Apply cleaned names
+names(raw_data) <- col_names
+
+# Load processed data
+data <- read.csv(here::here("data", "processed", "survey_data_processed.csv"), 
+                 stringsAsFactors = FALSE)
+
+# Reclassify Class D as Class B
+data <- data %>%
+  mutate(vignette_class = ifelse(vignette_class == "D", "B", vignette_class))
+```
+
+# Study Overview
+
+## Table 1: Study Composition
+
+This table provides a comprehensive overview of the study design, organized into two sections: Vignettes and Respondents.
+
+```{r study-overview}
+# ============================================================================
+# SECTION 1: VIGNETTE COUNTS BY CLASS AND SUBCLASS
+# ============================================================================
+
+# Get unique vignettes with their classifications
+# Reclassify D as B with "Medevac or Remain" subclass
+vignette_info <- data %>%
+  distinct(question, vignette_label, question_type, vignette_class) %>%
+  mutate(
+    # Reclassify D as B
+    vignette_class = ifelse(vignette_class == "D", "B", vignette_class),
+    subclass = case_when(
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial",
+      vignette_class == "B" & grepl("Conflict", question_type) ~ "Medevac or Remain",
+      vignette_class == "C" ~ "All Options Reasonable",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Count vignettes and create section
+vignette_section <- data.frame(
+  Category = c(
+    "Total Vignettes",
+    "  Class A (One Correct Answer)",
+    "    Medevac",
+    "    Commercial",
+    "    Remain",
+    "  Class B (Two Reasonable Options)",
+    "    Medevac or Commercial",
+    "    Commercial or Remain",
+    "    Medevac or Remain",
+    "  Class C (Highly Ambiguous)",
+    "    All Options Reasonable"
+  ),
+  Value = as.character(c(
+    nrow(vignette_info),
+    sum(vignette_info$vignette_class == "A"),
+    sum(vignette_info$subclass == "Medevac", na.rm = TRUE),
+    sum(vignette_info$subclass == "Commercial", na.rm = TRUE),
+    sum(vignette_info$subclass == "Remain", na.rm = TRUE),
+    sum(vignette_info$vignette_class == "B"),
+    sum(vignette_info$subclass == "Medevac or Commercial", na.rm = TRUE),
+    sum(vignette_info$subclass == "Commercial or Remain", na.rm = TRUE),
+    sum(vignette_info$subclass == "Medevac or Remain", na.rm = TRUE),
+    sum(vignette_info$vignette_class == "C"),
+    sum(vignette_info$subclass == "All Options Reasonable", na.rm = TRUE)
+  )),
+  stringsAsFactors = FALSE
+)
+
+# ============================================================================
+# SECTION 2: RESPONDENT INFORMATION
+# ============================================================================
+
+# Extract respondent data from raw survey
+# This is a simpler approach that handles multiple survey versions
+
+# Get unique physicians from processed data
+physician_ids <- unique(data$physician_id)
+
+# Create a function to extract affiliation for each physician
+get_affiliation <- function(pid, raw_df) {
+  # Find row for this physician
+  row_idx <- which(raw_df[[1]] == pid)[1]
+  if(length(row_idx) == 0 || is.na(row_idx)) return("Unknown")
+  
+  # Check all columns for affiliation markers
+  row_data <- raw_df[row_idx, ]
+  
+  # Look for "Checked" in columns with affiliation names
+  if(any(grepl("Maniilaq", names(row_data)) & row_data == "Checked", na.rm = TRUE)) {
+    return("Maniilaq")
+  } else if(any(grepl("YKHC", names(row_data)) & row_data == "Checked", na.rm = TRUE)) {
+    return("YKHC")
+  } else if(any(grepl("ANMC", names(row_data)) & row_data == "Checked", na.rm = TRUE)) {
+    return("ANMC")
+  } else if(any(grepl("work.*Other", names(row_data)) & row_data == "Checked", na.rm = TRUE)) {
+    return("Other")
+  }
+  
+  return("Unknown")
+}
+
+# Extract year completed training
+year_col_idx <- which(grepl("year.*complete.*training", names(raw_data), ignore.case = TRUE))[1]
+
+# Build respondent data
+respondent_data <- data.frame(
+  physician_id = physician_ids,
+  stringsAsFactors = FALSE
+) %>%
+  rowwise() %>%
+  mutate(
+    affiliation = get_affiliation(physician_id, raw_data),
+    year_completed = {
+      row_idx <- which(raw_data[[1]] == physician_id)[1]
+      if(length(row_idx) > 0 && !is.na(row_idx)) {
+        as.numeric(as.character(raw_data[[row_idx, year_col_idx]]))
+      } else {
+        NA_real_
+      }
+    },
+    years_since_completion = 2025 - year_completed
+  ) %>%
+  ungroup()
+
+# Calculate summary statistics
+n_respondents <- nrow(respondent_data)
+mean_years <- round(mean(respondent_data$years_since_completion, na.rm = TRUE), 1)
+sd_years <- round(sd(respondent_data$years_since_completion, na.rm = TRUE), 1)
+median_years <- median(respondent_data$years_since_completion, na.rm = TRUE)
+range_years <- range(respondent_data$years_since_completion, na.rm = TRUE)
+
+# Count by affiliation
+affiliation_counts <- respondent_data %>%
+  count(affiliation) %>%
+  arrange(desc(n))
+
+# Create respondent section
+respondent_section <- data.frame(
+  Category = c(
+    "Total Physicians",
+    "  By Affiliation:",
+    paste0("    ", affiliation_counts$affiliation),
+    "",
+    "  Years Since Training:",
+    paste0("    Mean (SD)"),
+    paste0("    Median"),
+    paste0("    Range")
+  ),
+  Value = as.character(c(
+    n_respondents,
+    "",
+    affiliation_counts$n,
+    "",
+    "",
+    paste0(mean_years, " (", sd_years, ")"),
+    median_years,
+    paste0(range_years[1], "-", range_years[2])
+  )),
+  stringsAsFactors = FALSE
+)
+
+# ============================================================================
+# SECTION 3: RESPONSE METRICS
+# ============================================================================
+
+# Calculate vignette-level metrics for the Responses section
+vignette_metrics <- data %>%
+  group_by(question) %>%
+  summarise(
+    modal_decision = names(sort(table(decision), decreasing = TRUE))[1],
+    agreement_pct = round(100 * max(table(decision)) / n(), 1),
+    entropy = {
+      props <- prop.table(table(decision))
+      -sum(props * log2(props + 1e-10))
+    },
+    mean_confidence = mean(confidence, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Calculate overall metrics
+total_responses <- nrow(data)
+mean_agreement <- round(mean(vignette_metrics$agreement_pct), 1)
+median_agreement <- round(median(vignette_metrics$agreement_pct), 1)
+min_agreement <- min(vignette_metrics$agreement_pct)
+max_agreement <- max(vignette_metrics$agreement_pct)
+mean_confidence_overall <- round(mean(data$confidence, na.rm = TRUE), 1)
+mean_entropy <- round(mean(vignette_metrics$entropy), 3)
+n_high_agreement <- sum(vignette_metrics$agreement_pct >= 75)
+n_low_agreement <- sum(vignette_metrics$agreement_pct < 50)
+
+# Create responses section (simplified to only Total Responses)
+responses_section <- data.frame(
+  Category = c("Total Responses"),
+  Value = as.character(total_responses),
+  stringsAsFactors = FALSE
+)
+
+# ============================================================================
+# COMBINE ALL SECTIONS
+# ============================================================================
+
+# Add section headers
+vignette_header <- data.frame(Category = "**VIGNETTES**", Value = "", stringsAsFactors = FALSE)
+respondent_header <- data.frame(Category = "**RESPONDENTS**", Value = "", stringsAsFactors = FALSE)
+responses_header <- data.frame(Category = "**RESPONSES**", Value = "", stringsAsFactors = FALSE)
+
+overview_table <- bind_rows(
+  vignette_header,
+  vignette_section,
+  data.frame(Category = "", Value = "", stringsAsFactors = FALSE),  # Blank row separator
+  respondent_header,
+  respondent_section,
+  data.frame(Category = "", Value = "", stringsAsFactors = FALSE),  # Blank row separator
+  responses_header,
+  responses_section
+)
+
+# ============================================================================
+# DISPLAY TABLE
+# ============================================================================
+
+kable(overview_table,
+      col.names = c("", ""),
+      align = c("l", "r"),
+      caption = "Study Composition: Vignettes, Respondents, and Response Metrics") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("hold_position", "scale_down")
+  ) %>%
+  # Section headers
+  row_spec(which(overview_table$Category == "**VIGNETTES**"), 
+           bold = TRUE, font_size = 14, background = "#e8f4f8") %>%
+  row_spec(which(overview_table$Category == "**RESPONDENTS**"), 
+           bold = TRUE, font_size = 14, background = "#e8f4f8") %>%
+  row_spec(which(overview_table$Category == "**RESPONSES**"), 
+           bold = TRUE, font_size = 14, background = "#e8f4f8") %>%
+  # Main category rows in Vignettes section
+  row_spec(2, bold = TRUE) %>%  # Total Vignettes
+  row_spec(3, bold = TRUE, italic = TRUE) %>%  # Class A
+  row_spec(8, bold = TRUE, italic = TRUE) %>%  # Class B
+  row_spec(12, bold = TRUE, italic = TRUE)  # Class C
+```
+
+**Note:** This table summarizes the complete study composition with `r nrow(vignette_info)` unique clinical vignettes evaluated by `r n_respondents` physicians (mean experience: `r mean_years` years since training completion), generating `r total_responses` total responses.
+
+---
+
+```{r create-physician-letter-mapping}
+# Create random letter assignment for physicians (A-Z)
+# Set seed for reproducibility
+set.seed(42)
+
+# Get all unique physician IDs
+all_physician_ids <- sort(unique(data$physician_id))
+
+# Create random letter assignment (A-Z)
+# Assuming we have 20 physicians
+letters_available <- LETTERS[1:length(all_physician_ids)]
+random_letters <- sample(letters_available, length(all_physician_ids), replace = FALSE)
+
+# Create mapping dataframe
+physician_letter_map <- data.frame(
+  physician_id = all_physician_ids,
+  physician_letter = random_letters,
+  stringsAsFactors = FALSE
+)
+```
+
+## Figure 1: Response Distribution by Physician
+
+```{r figure1-physician-response-distribution}
+# Get physician years data to mark experienced physicians
+year_col_idx <- which(grepl("year.*complete.*training", names(raw_data), ignore.case = TRUE))[1]
+
+physician_years_all <- data.frame(
+  physician_id = raw_data[[1]],
+  year_completed = as.numeric(as.character(raw_data[[year_col_idx]])),
+  stringsAsFactors = FALSE
+) %>%
+  mutate(
+    current_year = 2025,
+    years_since_completion = current_year - year_completed,
+    experienced = !is.na(years_since_completion) & years_since_completion > 5
+  )
+
+# Calculate proportion of each decision type for each physician (all respondents)
+physician_decisions_all <- data %>%
+  group_by(physician_id) %>%
+  summarise(
+    total_responses = n(),
+    n_medevac = sum(decision == "Medevac", na.rm = TRUE),
+    n_commercial = sum(decision == "Commercial", na.rm = TRUE),
+    n_remain = sum(decision == "Remain", na.rm = TRUE),
+    pct_medevac = round(100 * n_medevac / total_responses, 1),
+    pct_commercial = round(100 * n_commercial / total_responses, 1),
+    pct_remain = round(100 * n_remain / total_responses, 1),
+    .groups = "drop"
+  ) %>%
+  # Join with letter mapping and years data
+  left_join(physician_letter_map, by = "physician_id") %>%
+  left_join(physician_years_all %>% select(physician_id, experienced), by = "physician_id") %>%
+  arrange(desc(pct_medevac)) %>%
+  mutate(
+    # Add dagger for experienced physicians (>5 years)
+    physician_label = ifelse(experienced, 
+                             paste0("Respondent ", physician_letter, "\u2020"),
+                             paste0("Respondent ", physician_letter)),
+    # Create ordered factor for physician letter, sorted by % Medevac (highest at top)
+    # Reverse the levels so highest appears at top of y-axis
+    Physician = factor(physician_label, 
+                       levels = rev(physician_label))
+  )
+
+# Reshape for stacked bars
+physician_long_all <- physician_decisions_all %>%
+  select(Physician, pct_medevac, pct_commercial, pct_remain) %>%
+  pivot_longer(cols = c(pct_medevac, pct_commercial, pct_remain),
+               names_to = "Decision",
+               values_to = "Percentage") %>%
+  mutate(
+    Decision = case_when(
+      Decision == "pct_medevac" ~ "Medevac",
+      Decision == "pct_commercial" ~ "Commercial",
+      Decision == "pct_remain" ~ "Remain"
+    ),
+    # CRITICAL: For coord_flip(), reverse the factor order so Medevac ends up on LEFT
+    Decision = factor(Decision, levels = c("Remain", "Commercial", "Medevac"))
+  )
+
+# Create stacked bar chart using coord_flip() for better control
+ggplot(physician_long_all, aes(x = Physician, y = Percentage, fill = Decision)) +
+  geom_col(position = "stack", width = 0.8) +
+  coord_flip() +
+  scale_fill_manual(
+    values = c(
+      "Medevac" = "#E74C3C",
+      "Commercial" = "#3498DB",
+      "Remain" = "#2ECC71"
+    ),
+    name = "Decision",
+    breaks = c("Medevac", "Commercial", "Remain"),
+    labels = c("Medevac", "Commercial", "Remain")
+  ) +
+  labs(
+    title = "Figure 1: Response Distribution by Physician",
+    y = "Proportion of Responses (%)",
+    x = "Physician",
+    fill = "Decision Type",
+    caption = "\u2020 Indicates >5 years since training completion"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.caption = element_text(size = 9, hjust = 0),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20))
+```
+
+---
+
+## Overall Results
+
+Mean Agreement %: `r mean_agreement`%
+
+Median Agreement %: `r median_agreement`%
+
+Agreement Range: `r min_agreement`% - `r max_agreement`%
+
+Mean Confidence: `r mean_confidence_overall`
+
+Mean Entropy: `r mean_entropy`
+
+Vignettes with >=75% Agreement: `r n_high_agreement`
+
+Vignettes with <50% Agreement: `r n_low_agreement`
+
+---
+
+## Tables 2.1-2.3: Summary Statistics by Individual Vignette
+
+These tables show detailed statistics for each vignette organized by class, with response distributions presented as percentage and count (% (n=)).
+
+```{r vignette-summary}
+# Calculate summary statistics for each vignette
+vignette_summary <- data %>%
+  group_by(question, vignette_label, question_type, vignette_class) %>%
+  summarise(
+    n_responses = n(),
+    
+    # Count and percentage for each decision
+    n_medevac = sum(decision == "Medevac", na.rm = TRUE),
+    n_commercial = sum(decision == "Commercial", na.rm = TRUE),
+    n_remain = sum(decision == "Remain", na.rm = TRUE),
+    
+    pct_medevac = round(100 * n_medevac / n_responses, 1),
+    pct_commercial = round(100 * n_commercial / n_responses, 1),
+    pct_remain = round(100 * n_remain / n_responses, 1),
+    
+    # Modal decision and agreement
+    modal_decision = names(sort(table(decision), decreasing = TRUE))[1],
+    agreement_pct = round(100 * max(table(decision)) / n(), 1),
+    
+    # Entropy (measure of disagreement/uncertainty)
+    entropy = {
+      props <- prop.table(table(decision))
+      -sum(props * log2(props + 1e-10))
+    },
+    
+    # Mean confidence
+    mean_confidence = round(mean(confidence, na.rm = TRUE), 1),
+    
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create formatted strings: "% (n=X)"
+    Medevac = sprintf("%.1f%% (n=%d)", pct_medevac, n_medevac),
+    Commercial = sprintf("%.1f%% (n=%d)", pct_commercial, n_commercial),
+    Remain = sprintf("%.1f%% (n=%d)", pct_remain, n_remain),
+    
+    # Add subclass classification
+    subclass = case_when(
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial",
+      vignette_class == "B" & grepl("Conflict", question_type) ~ "Medevac or Remain",
+      vignette_class == "C" ~ "All Options Reasonable",
+      TRUE ~ as.character(vignette_class)
+    ),
+    
+    # Calculate "Selected Valid Option %" for Class B
+    valid_option_pct = case_when(
+      subclass == "Medevac or Commercial" ~ pct_medevac + pct_commercial,
+      subclass == "Commercial or Remain" ~ pct_commercial + pct_remain,
+      subclass == "Medevac or Remain" ~ pct_medevac + pct_remain,
+      TRUE ~ NA_real_
+    ),
+    
+    # Create ordered factor for sorting
+    subclass_order = factor(subclass, 
+                           levels = c("Medevac", "Commercial", "Remain",
+                                    "Medevac or Commercial", "Commercial or Remain",
+                                    "Medevac or Remain", "All Options Reasonable"))
+  )
+
+# Calculate Gwet's AC1 for each vignette
+# Use three-option calculation for all classes (Medevac, Commercial, Remain)
+ac1_by_vignette <- data %>%
+  group_by(question) %>%
+  summarise(
+    # Get all physician decisions for this vignette
+    decisions_vec = list(decision[!is.na(decision)]),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    decisions_vec = list(unlist(decisions_vec)),
+    n_decisions = length(decisions_vec),
+    n_unique = length(unique(decisions_vec)),
+    
+    # Calculate AC1 using three-option calculation for all classes
+    gwet_ac1 = {
+      if (n_decisions == 0 || n_unique <= 1) {
+        if (n_decisions > 0 && n_unique == 1) {
+          1.0  # Perfect agreement
+        } else {
+          NA_real_  # Cannot compute
+        }
+      } else {
+        # For all classes, use three-option calculation
+        # Convert to numeric codes (1=Medevac, 2=Commercial, 3=Remain)
+        decision_codes <- as.numeric(factor(decisions_vec, levels = c("Medevac", "Commercial", "Remain")))
+        
+        # Create ratings matrix: 1 row (one vignette), multiple columns (raters/physicians)
+        ratings_matrix <- matrix(decision_codes, nrow = 1)
+        
+        # Calculate Gwet's AC1
+        ac1_result <- tryCatch({
+          result <- gwet.ac1.raw(ratings_matrix)
+          round(result$est$coeff.val, 3)
+        }, error = function(e) {
+          NA_real_
+        })
+        ac1_result
+      }
+    },
+    
+    # Determine interpretation
+    ac1_interpretation = case_when(
+      is.na(gwet_ac1) && n_decisions == 0 ~ "Cannot compute",
+      !is.na(gwet_ac1) && gwet_ac1 == 1.0 ~ "Perfect",
+      is.na(gwet_ac1) ~ "Cannot compute",
+      gwet_ac1 < 0.00 ~ "None",
+      gwet_ac1 <= 0.20 ~ "Slight",
+      gwet_ac1 <= 0.40 ~ "Fair",
+      gwet_ac1 <= 0.60 ~ "Moderate",
+      gwet_ac1 <= 0.80 ~ "Good",
+      gwet_ac1 <= 0.99 ~ "Very Good",
+      TRUE ~ "Perfect"
+    )
+  ) %>%
+  ungroup() %>%
+  select(question, gwet_ac1, ac1_interpretation)
+
+# Join AC1 results to vignette_summary
+vignette_summary <- vignette_summary %>%
+  left_join(ac1_by_vignette, by = "question")
+```
+
+```{r table2-1-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table2-1-display}
+# Filter for Class A
+table2_1 <- vignette_summary %>%
+  filter(vignette_class == "A") %>%
+  arrange(subclass_order, question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table2_1,
+      caption = "Table 2.1: Class A - One Correct Answer",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table2_1$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table2_1$`Agreement %` >= 50, "orange", "red")))
+```
+
+```{r table2-1-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+```{r table2-2-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table2-2-display}
+# Filter for Class B
+table2_2 <- vignette_summary %>%
+  filter(vignette_class == "B") %>%
+  arrange(subclass_order, question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table2_2,
+      caption = "Table 2.2: Class B - Two Reasonable Options",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table2_2$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table2_2$`Agreement %` >= 50, "orange", "red"))) %>%
+  column_spec(8, width = "1.5cm") %>%
+  column_spec(9, width = "2cm")
+```
+
+```{r table2-2-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+```{r table2-3-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table2-3-display}
+# Filter for Class C
+table2_3 <- vignette_summary %>%
+  filter(vignette_class == "C") %>%
+  arrange(question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table2_3,
+      caption = "Table 2.3: Class C - Highly Ambiguous",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table2_3$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table2_3$`Agreement %` >= 50, "orange", "red")))
+```
+
+```{r table2-3-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+**Note:** Each vignette was evaluated by `r length(unique(data$physician_id))` physicians. Agreement % (highlighted in green ≥75%, orange 50-74%, red <50%) indicates the percentage who selected the modal decision. Entropy measures disagreement (0 = perfect agreement, higher = more disagreement).
+
+---
+
+## Figure 2: Agreement and Confidence by Subclass
+
+```{r figure1-dual-axis}
+# Calculate mean agreement % and confidence by subclass
+subclass_metrics <- vignette_summary %>%
+  group_by(vignette_class, subclass) %>%
+  summarise(
+    mean_agreement = mean(agreement_pct, na.rm = TRUE),
+    mean_confidence = mean(mean_confidence, na.rm = TRUE),
+    n_vignettes = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create Class label for grouping
+    Class = case_when(
+      vignette_class == "A" ~ "Class A: One Correct Answer",
+      vignette_class == "B" ~ "Class B: Two Reasonable Options",
+      vignette_class == "C" ~ "Class C: Highly Ambiguous",
+      TRUE ~ vignette_class
+    ),
+    # Order subclasses within each class
+    subclass_order = factor(subclass, 
+                            levels = c("Medevac", "Commercial", "Remain",
+                                     "Medevac or Commercial", "Commercial or Remain",
+                                     "Medevac or Remain", "All Options Reasonable"))
+  ) %>%
+  arrange(vignette_class, subclass_order) %>%
+  mutate(
+    subclass_factor = factor(subclass, 
+                              levels = unique(subclass[order(vignette_class, subclass_order)]))
+  )
+
+# Reshape data for side-by-side bars
+subclass_long <- subclass_metrics %>%
+  select(subclass_factor, Class, mean_agreement, mean_confidence) %>%
+  pivot_longer(cols = c(mean_agreement, mean_confidence),
+               names_to = "Metric",
+               values_to = "Value") %>%
+  mutate(
+    Metric = case_when(
+      Metric == "mean_agreement" ~ "Agreement %",
+      Metric == "mean_confidence" ~ "Confidence"
+    ),
+    # Scale confidence to 0-100 for comparison (will use secondary axis)
+    Value_scaled = ifelse(Metric == "Confidence", Value * 10, Value),
+    # Create fill variable that combines class and metric
+    Fill = paste(Class, Metric, sep = "_")
+  )
+
+# Create the plot with side-by-side bars
+ggplot(subclass_long, aes(x = subclass_factor, y = Value_scaled, fill = Fill)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      # Class A
+      "Class A: One Correct Answer_Agreement %" = "#4A90E2",
+      "Class A: One Correct Answer_Confidence" = "#87CEEB",
+      # Class B
+      "Class B: Two Reasonable Options_Agreement %" = "#50C878",
+      "Class B: Two Reasonable Options_Confidence" = "#90EE90",
+      # Class C
+      "Class C: Highly Ambiguous_Agreement %" = "#FF6B6B",
+      "Class C: Highly Ambiguous_Confidence" = "#FFB6C1"
+    ),
+    guide = "none"
+  ) +
+  scale_y_continuous(
+    name = "Agreement %",
+    limits = c(0, 100),
+    breaks = seq(0, 100, 20),
+    sec.axis = sec_axis(~ . / 10, name = "Mean Confidence (1-10)", breaks = seq(0, 10, 2))
+  ) +
+  labs(
+    title = "Figure 2: Agreement and Confidence by Subclass",
+    x = "Subclass (grouped by Class)",
+    y = "Agreement %",
+    caption = "Left axis: Agreement %. Right axis: Mean Confidence (1-10). Darker bars = Agreement %, Lighter bars = Confidence. Colors indicate Class."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.text.y.right = element_text(size = 10, color = "gray50"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.title.y.right = element_text(color = "gray50"),
+    plot.caption = element_text(size = 9, hjust = 0),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(
+    data = subclass_long,
+    aes(
+      label = ifelse(Metric == "Agreement %", 
+                     paste0(round(Value, 1), "%"), 
+                     paste0(round(Value, 1))),
+      group = Fill,
+      color = Metric
+    ),
+    position = position_dodge(width = 0.7),
+    vjust = -0.5, 
+    size = 3, 
+    fontface = "bold"
+  ) +
+  scale_color_manual(
+    values = c("Agreement %" = "black", "Confidence" = "gray50"),
+    guide = "none"
+  )
+```
+
+---
+
+```{r calculate-n-high-conf}
+# Calculate n for high confidence responses (used in header)
+# Count unique physicians, not total responses
+n_high_conf <- data %>% 
+  filter(confidence >= 8) %>% 
+  select(physician_id) %>% 
+  distinct() %>% 
+  nrow()
+```
+
+## Tables 3.1-3.3: Summary Statistics by Individual Vignette (High Confidence Only, n=`r n_high_conf`)
+
+These tables show detailed statistics for each vignette, including only responses with confidence scores of 8 or higher.
+
+```{r vignette-summary-high-confidence}
+# Filter data to only include responses with confidence >= 8
+data_high_conf <- data %>%
+  filter(confidence >= 8)
+
+# Calculate summary statistics for each vignette (high confidence only)
+vignette_summary_high_conf <- data_high_conf %>%
+  group_by(question, vignette_label, question_type, vignette_class) %>%
+  summarise(
+    n_responses = n(),
+    
+    # Count and percentage for each decision
+    n_medevac = sum(decision == "Medevac", na.rm = TRUE),
+    n_commercial = sum(decision == "Commercial", na.rm = TRUE),
+    n_remain = sum(decision == "Remain", na.rm = TRUE),
+    
+    pct_medevac = round(100 * n_medevac / n_responses, 1),
+    pct_commercial = round(100 * n_commercial / n_responses, 1),
+    pct_remain = round(100 * n_remain / n_responses, 1),
+    
+    # Modal decision and agreement
+    modal_decision = names(sort(table(decision), decreasing = TRUE))[1],
+    agreement_pct = round(100 * max(table(decision)) / n(), 1),
+    
+    # Entropy (measure of disagreement/uncertainty)
+    entropy = {
+      props <- prop.table(table(decision))
+      -sum(props * log2(props + 1e-10))
+    },
+    
+    # Mean confidence
+    mean_confidence = round(mean(confidence, na.rm = TRUE), 1),
+    
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create formatted strings: "% (n=X)"
+    Medevac = sprintf("%.1f%% (n=%d)", pct_medevac, n_medevac),
+    Commercial = sprintf("%.1f%% (n=%d)", pct_commercial, n_commercial),
+    Remain = sprintf("%.1f%% (n=%d)", pct_remain, n_remain),
+    
+    # Add subclass classification
+    subclass = case_when(
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial",
+      vignette_class == "B" & grepl("Conflict", question_type) ~ "Medevac or Remain",
+      vignette_class == "C" ~ "All Options Reasonable",
+      TRUE ~ as.character(vignette_class)
+    ),
+    
+    # Create ordered factor for sorting
+    subclass_order = factor(subclass, 
+                           levels = c("Medevac", "Commercial", "Remain",
+                                    "Medevac or Commercial", "Commercial or Remain",
+                                    "Medevac or Remain", "All Options Reasonable"))
+  )
+
+# Calculate Gwet's AC1 for high confidence responses
+# Use three-option calculation for all classes (Medevac, Commercial, Remain)
+ac1_by_vignette_high_conf <- data_high_conf %>%
+  group_by(question) %>%
+  summarise(
+    decisions_vec = list(decision[!is.na(decision)]),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    decisions_vec = list(unlist(decisions_vec)),
+    n_decisions = length(decisions_vec),
+    n_unique = length(unique(decisions_vec)),
+    
+    gwet_ac1 = {
+      if (n_decisions == 0 || n_unique <= 1) {
+        if (n_decisions > 0 && n_unique == 1) {
+          1.0
+        } else {
+          NA_real_
+        }
+      } else {
+        # For all classes, use three-option calculation
+        decision_codes <- as.numeric(factor(decisions_vec, levels = c("Medevac", "Commercial", "Remain")))
+        ratings_matrix <- matrix(decision_codes, nrow = 1)
+        ac1_result <- tryCatch({
+          result <- gwet.ac1.raw(ratings_matrix)
+          round(result$est$coeff.val, 3)
+        }, error = function(e) {
+          NA_real_
+        })
+        ac1_result
+      }
+    },
+    
+    ac1_interpretation = case_when(
+      is.na(gwet_ac1) && n_decisions == 0 ~ "Cannot compute",
+      !is.na(gwet_ac1) && gwet_ac1 == 1.0 ~ "Perfect",
+      is.na(gwet_ac1) ~ "Cannot compute",
+      gwet_ac1 < 0.00 ~ "None",
+      gwet_ac1 <= 0.20 ~ "Slight",
+      gwet_ac1 <= 0.40 ~ "Fair",
+      gwet_ac1 <= 0.60 ~ "Moderate",
+      gwet_ac1 <= 0.80 ~ "Good",
+      gwet_ac1 <= 0.99 ~ "Very Good",
+      TRUE ~ "Perfect"
+    )
+  ) %>%
+  ungroup() %>%
+  select(question, gwet_ac1, ac1_interpretation)
+
+# Join AC1 results to vignette_summary_high_conf
+vignette_summary_high_conf <- vignette_summary_high_conf %>%
+  left_join(ac1_by_vignette_high_conf, by = "question")
+```
+
+### Table 3.1: One Correct Answer (High Confidence Only)
+
+```{r table3-1-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table3-1-display}
+# Filter for Class A
+table3_1 <- vignette_summary_high_conf %>%
+  filter(vignette_class == "A") %>%
+  arrange(subclass_order, question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table3_1,
+      caption = "Table 3.1: Class A - One Correct Answer (Confidence >= 8)",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table3_1$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table3_1$`Agreement %` >= 50, "orange", "red")))
+```
+
+```{r table3-1-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+### Table 3.2: Two Reasonable Options (High Confidence Only)
+
+```{r table3-2-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table3-2-display}
+# Filter for Class B
+table3_2 <- vignette_summary_high_conf %>%
+  filter(vignette_class == "B") %>%
+  arrange(subclass_order, question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table3_2,
+      caption = "Table 3.2: Class B - Two Reasonable Options (Confidence >= 8)",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table3_2$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table3_2$`Agreement %` >= 50, "orange", "red"))) %>%
+  column_spec(8, width = "1.5cm") %>%
+  column_spec(9, width = "2cm")
+```
+
+```{r table3-2-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+### Table 3.3: Highly Ambiguous (High Confidence Only)
+
+```{r table3-3-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table3-3-display}
+# Filter for Class C
+table3_3 <- vignette_summary_high_conf %>%
+  filter(vignette_class == "C") %>%
+  arrange(question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table3_3,
+      caption = "Table 3.3: Class C - Highly Ambiguous (Confidence >= 8)",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table3_3$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table3_3$`Agreement %` >= 50, "orange", "red")))
+```
+
+```{r table3-3-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+## Figure 3: Agreement and Confidence by Subclass (High Confidence Only, n=`r n_high_conf`)
+
+```{r figure2-high-confidence}
+# Calculate mean agreement % and confidence by subclass (high confidence only)
+subclass_metrics_high_conf <- vignette_summary_high_conf %>%
+  group_by(vignette_class, subclass) %>%
+  summarise(
+    mean_agreement = mean(agreement_pct, na.rm = TRUE),
+    mean_confidence = mean(mean_confidence, na.rm = TRUE),
+    n_vignettes = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create Class label for grouping
+    Class = case_when(
+      vignette_class == "A" ~ "Class A: One Correct Answer",
+      vignette_class == "B" ~ "Class B: Two Reasonable Options",
+      vignette_class == "C" ~ "Class C: Highly Ambiguous",
+      TRUE ~ vignette_class
+    ),
+    # Order subclasses within each class
+    subclass_order = factor(subclass, 
+                            levels = c("Medevac", "Commercial", "Remain",
+                                     "Medevac or Commercial", "Commercial or Remain",
+                                     "Medevac or Remain", "All Options Reasonable"))
+  ) %>%
+  arrange(vignette_class, subclass_order) %>%
+  mutate(
+    subclass_factor = factor(subclass, 
+                              levels = unique(subclass[order(vignette_class, subclass_order)]))
+  )
+
+# Reshape data for side-by-side bars
+subclass_long_high_conf <- subclass_metrics_high_conf %>%
+  select(subclass_factor, Class, mean_agreement, mean_confidence) %>%
+  pivot_longer(cols = c(mean_agreement, mean_confidence),
+               names_to = "Metric",
+               values_to = "Value") %>%
+  mutate(
+    Metric = case_when(
+      Metric == "mean_agreement" ~ "Agreement %",
+      Metric == "mean_confidence" ~ "Confidence"
+    ),
+    # Scale confidence to 0-100 for comparison (will use secondary axis)
+    Value_scaled = ifelse(Metric == "Confidence", Value * 10, Value),
+    # Create fill variable that combines class and metric
+    Fill = paste(Class, Metric, sep = "_")
+  )
+
+# Create the plot with side-by-side bars
+ggplot(subclass_long_high_conf, aes(x = subclass_factor, y = Value_scaled, fill = Fill)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      # Class A
+      "Class A: One Correct Answer_Agreement %" = "#4A90E2",
+      "Class A: One Correct Answer_Confidence" = "#87CEEB",
+      # Class B
+      "Class B: Two Reasonable Options_Agreement %" = "#50C878",
+      "Class B: Two Reasonable Options_Confidence" = "#90EE90",
+      # Class C
+      "Class C: Highly Ambiguous_Agreement %" = "#FF6B6B",
+      "Class C: Highly Ambiguous_Confidence" = "#FFB6C1"
+    ),
+    guide = "none"
+  ) +
+  scale_y_continuous(
+    name = "Agreement %",
+    limits = c(0, 100),
+    breaks = seq(0, 100, 20),
+    sec.axis = sec_axis(~ . / 10, name = "Mean Confidence (1-10)", breaks = seq(0, 10, 2))
+  ) +
+  labs(
+    title = paste0("Figure 3: Agreement and Confidence by Subclass (High Confidence Only, n=", n_high_conf, ")"),
+    x = "Subclass (grouped by Class)",
+    y = "Agreement %",
+    caption = "Left axis: Agreement %. Right axis: Mean Confidence (1-10). Darker bars = Agreement %, Lighter bars = Confidence. Colors indicate Class. Only includes responses with confidence >= 8."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.text.y.right = element_text(size = 10, color = "gray50"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.title.y.right = element_text(color = "gray50"),
+    plot.caption = element_text(size = 9, hjust = 0),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(
+    data = subclass_long_high_conf,
+    aes(
+      label = ifelse(Metric == "Agreement %", 
+                     paste0(round(Value, 1), "%"), 
+                     paste0(round(Value, 1))),
+      group = Fill,
+      color = Metric
+    ),
+    position = position_dodge(width = 0.7),
+    vjust = -0.5, 
+    size = 3, 
+    fontface = "bold"
+  ) +
+  scale_color_manual(
+    values = c("Agreement %" = "black", "Confidence" = "gray50"),
+    guide = "none"
+  )
+```
+
+---
+
+```{r calculate-n-experienced}
+# Calculate n for experienced respondents (used in header)
+# First, get physician years since completion from raw_data
+# Find the year column using grep (same approach as in Table 1)
+year_col_idx <- which(grepl("year.*complete.*training", names(raw_data), ignore.case = TRUE))[1]
+
+# Get physician IDs and years since completion
+physician_years_data <- data.frame(
+  physician_id = raw_data[[1]],  # First column is physician ID
+  year_completed = as.numeric(as.character(raw_data[[year_col_idx]])),
+  stringsAsFactors = FALSE
+) %>%
+  mutate(
+    current_year = 2025,  # Match the year used in Table 1
+    years_since_completion = current_year - year_completed
+  ) %>%
+  filter(!is.na(years_since_completion), years_since_completion > 5)
+
+physician_years <- physician_years_data$physician_id
+
+# Count unique physicians (not total responses)
+n_experienced <- length(physician_years)
+```
+
+## Tables 4.1-4.3: Summary Statistics by Individual Vignette (Experienced Respondents Only, n=`r n_experienced`)
+
+These tables show detailed statistics for each vignette, including only responses from physicians with more than 5 years since training completion.
+
+```{r vignette-summary-experienced}
+# Filter data to only include responses from experienced physicians (>5 years)
+# First, get physician IDs with >5 years experience
+experienced_physicians <- respondent_data %>%
+  filter(years_since_completion > 5) %>%
+  pull(physician_id)
+
+data_experienced <- data %>%
+  filter(physician_id %in% experienced_physicians)
+
+# Calculate summary statistics for each vignette (experienced only)
+vignette_summary_experienced <- data_experienced %>%
+  group_by(question, vignette_label, question_type, vignette_class) %>%
+  summarise(
+    n_responses = n(),
+    
+    # Count and percentage for each decision
+    n_medevac = sum(decision == "Medevac", na.rm = TRUE),
+    n_commercial = sum(decision == "Commercial", na.rm = TRUE),
+    n_remain = sum(decision == "Remain", na.rm = TRUE),
+    
+    pct_medevac = round(100 * n_medevac / n_responses, 1),
+    pct_commercial = round(100 * n_commercial / n_responses, 1),
+    pct_remain = round(100 * n_remain / n_responses, 1),
+    
+    # Modal decision and agreement
+    modal_decision = names(sort(table(decision), decreasing = TRUE))[1],
+    agreement_pct = round(100 * max(table(decision)) / n(), 1),
+    
+    # Entropy (measure of disagreement/uncertainty)
+    entropy = {
+      props <- prop.table(table(decision))
+      -sum(props * log2(props + 1e-10))
+    },
+    
+    # Mean confidence
+    mean_confidence = round(mean(confidence, na.rm = TRUE), 1),
+    
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create formatted strings: "% (n=X)"
+    Medevac = sprintf("%.1f%% (n=%d)", pct_medevac, n_medevac),
+    Commercial = sprintf("%.1f%% (n=%d)", pct_commercial, n_commercial),
+    Remain = sprintf("%.1f%% (n=%d)", pct_remain, n_remain),
+    
+    # Add subclass classification
+    subclass = case_when(
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial",
+      vignette_class == "B" & grepl("Conflict", question_type) ~ "Medevac or Remain",
+      vignette_class == "C" ~ "All Options Reasonable",
+      TRUE ~ as.character(vignette_class)
+    ),
+    
+    # Create ordered factor for sorting
+    subclass_order = factor(subclass, 
+                           levels = c("Medevac", "Commercial", "Remain",
+                                    "Medevac or Commercial", "Commercial or Remain",
+                                    "Medevac or Remain", "All Options Reasonable"))
+  )
+
+# Calculate Gwet's AC1 for experienced respondents
+# Use three-option calculation for all classes (Medevac, Commercial, Remain)
+ac1_by_vignette_experienced <- data_experienced %>%
+  group_by(question) %>%
+  summarise(
+    decisions_vec = list(decision[!is.na(decision)]),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    decisions_vec = list(unlist(decisions_vec)),
+    n_decisions = length(decisions_vec),
+    n_unique = length(unique(decisions_vec)),
+    
+    gwet_ac1 = {
+      if (n_decisions == 0 || n_unique <= 1) {
+        if (n_decisions > 0 && n_unique == 1) {
+          1.0
+        } else {
+          NA_real_
+        }
+      } else {
+        # For all classes, use three-option calculation
+        decision_codes <- as.numeric(factor(decisions_vec, levels = c("Medevac", "Commercial", "Remain")))
+        ratings_matrix <- matrix(decision_codes, nrow = 1)
+        ac1_result <- tryCatch({
+          result <- gwet.ac1.raw(ratings_matrix)
+          round(result$est$coeff.val, 3)
+        }, error = function(e) {
+          NA_real_
+        })
+        ac1_result
+      }
+    },
+    
+    ac1_interpretation = case_when(
+      is.na(gwet_ac1) && n_decisions == 0 ~ "Cannot compute",
+      !is.na(gwet_ac1) && gwet_ac1 == 1.0 ~ "Perfect",
+      is.na(gwet_ac1) ~ "Cannot compute",
+      gwet_ac1 < 0.00 ~ "None",
+      gwet_ac1 <= 0.20 ~ "Slight",
+      gwet_ac1 <= 0.40 ~ "Fair",
+      gwet_ac1 <= 0.60 ~ "Moderate",
+      gwet_ac1 <= 0.80 ~ "Good",
+      gwet_ac1 <= 0.99 ~ "Very Good",
+      TRUE ~ "Perfect"
+    )
+  ) %>%
+  ungroup() %>%
+  select(question, gwet_ac1, ac1_interpretation)
+
+# Join AC1 results to vignette_summary_experienced
+vignette_summary_experienced <- vignette_summary_experienced %>%
+  left_join(ac1_by_vignette_experienced, by = "question")
+```
+
+### Table 4.1: One Correct Answer (Experienced Respondents Only)
+
+```{r table4-1-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table4-1-display}
+# Filter for Class A
+table4_1 <- vignette_summary_experienced %>%
+  filter(vignette_class == "A") %>%
+  arrange(subclass_order, question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table4_1,
+      caption = "Table 4.1: Class A - One Correct Answer (>5 Years Experience)",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table4_1$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table4_1$`Agreement %` >= 50, "orange", "red")))
+```
+
+```{r table4-1-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+### Table 4.2: Two Reasonable Options (Experienced Respondents Only)
+
+```{r table4-2-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table4-2-display}
+# Filter for Class B
+table4_2 <- vignette_summary_experienced %>%
+  filter(vignette_class == "B") %>%
+  arrange(subclass_order, question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table4_2,
+      caption = "Table 4.2: Class B - Two Reasonable Options (>5 Years Experience)",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table4_2$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table4_2$`Agreement %` >= 50, "orange", "red"))) %>%
+  column_spec(8, width = "1.5cm") %>%
+  column_spec(9, width = "2cm")
+```
+
+```{r table4-2-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+### Table 4.3: Highly Ambiguous (Experienced Respondents Only)
+
+```{r table4-3-landscape-begin, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r table4-3-display}
+# Filter for Class C
+table4_3 <- vignette_summary_experienced %>%
+  filter(vignette_class == "C") %>%
+  arrange(question) %>%
+  select(
+    Subclass = subclass,
+    `Question Number` = question,
+    Medevac,
+    Commercial,
+    Remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+kable(table4_3,
+      caption = "Table 4.3: Class C - Highly Ambiguous (>5 Years Experience)",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    latex_options = c("scale_down", "hold_position")
+  ) %>%
+  column_spec(1, bold = TRUE, width = "2.5cm") %>%
+  column_spec(2, bold = TRUE, width = "1cm") %>%
+  column_spec(3:5, width = "2.5cm") %>%
+  column_spec(6, width = "2.5cm") %>%
+  column_spec(7, bold = TRUE, width = "1.5cm", 
+              color = ifelse(table4_3$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table4_3$`Agreement %` >= 50, "orange", "red")))
+```
+
+```{r table4-3-landscape-end, results='asis'}
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+## Figure 4: Agreement and Confidence by Subclass (Experienced Respondents Only, n=`r n_experienced`)
+
+```{r figure3-experienced}
+# Calculate mean agreement % and confidence by subclass (experienced only)
+subclass_metrics_experienced <- vignette_summary_experienced %>%
+  group_by(vignette_class, subclass) %>%
+  summarise(
+    mean_agreement = mean(agreement_pct, na.rm = TRUE),
+    mean_confidence = mean(mean_confidence, na.rm = TRUE),
+    n_vignettes = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create Class label for grouping
+    Class = case_when(
+      vignette_class == "A" ~ "Class A: One Correct Answer",
+      vignette_class == "B" ~ "Class B: Two Reasonable Options",
+      vignette_class == "C" ~ "Class C: Highly Ambiguous",
+      TRUE ~ vignette_class
+    ),
+    # Order subclasses within each class
+    subclass_order = factor(subclass, 
+                            levels = c("Medevac", "Commercial", "Remain",
+                                     "Medevac or Commercial", "Commercial or Remain",
+                                     "Medevac or Remain", "All Options Reasonable"))
+  ) %>%
+  arrange(vignette_class, subclass_order) %>%
+  mutate(
+    subclass_factor = factor(subclass, 
+                              levels = unique(subclass[order(vignette_class, subclass_order)]))
+  )
+
+# Reshape data for side-by-side bars
+subclass_long_experienced <- subclass_metrics_experienced %>%
+  select(subclass_factor, Class, mean_agreement, mean_confidence) %>%
+  pivot_longer(cols = c(mean_agreement, mean_confidence),
+               names_to = "Metric",
+               values_to = "Value") %>%
+  mutate(
+    Metric = case_when(
+      Metric == "mean_agreement" ~ "Agreement %",
+      Metric == "mean_confidence" ~ "Confidence"
+    ),
+    # Scale confidence to 0-100 for comparison (will use secondary axis)
+    Value_scaled = ifelse(Metric == "Confidence", Value * 10, Value),
+    # Create fill variable that combines class and metric
+    Fill = paste(Class, Metric, sep = "_")
+  )
+
+# Create the plot with side-by-side bars
+ggplot(subclass_long_experienced, aes(x = subclass_factor, y = Value_scaled, fill = Fill)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      # Class A
+      "Class A: One Correct Answer_Agreement %" = "#4A90E2",
+      "Class A: One Correct Answer_Confidence" = "#87CEEB",
+      # Class B
+      "Class B: Two Reasonable Options_Agreement %" = "#50C878",
+      "Class B: Two Reasonable Options_Confidence" = "#90EE90",
+      # Class C
+      "Class C: Highly Ambiguous_Agreement %" = "#FF6B6B",
+      "Class C: Highly Ambiguous_Confidence" = "#FFB6C1"
+    ),
+    guide = "none"
+  ) +
+  scale_y_continuous(
+    name = "Agreement %",
+    limits = c(0, 100),
+    breaks = seq(0, 100, 20),
+    sec.axis = sec_axis(~ . / 10, name = "Mean Confidence (1-10)", breaks = seq(0, 10, 2))
+  ) +
+  labs(
+    title = paste0("Figure 4: Agreement and Confidence by Subclass (Experienced Respondents Only, n=", n_experienced, ")"),
+    x = "Subclass (grouped by Class)",
+    y = "Agreement %",
+    caption = "Left axis: Agreement %. Right axis: Mean Confidence (1-10). Darker bars = Agreement %, Lighter bars = Confidence. Colors indicate Class. Only includes responses from physicians with >5 years since training completion."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.text.y.right = element_text(size = 10, color = "gray50"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.title.y.right = element_text(color = "gray50"),
+    plot.caption = element_text(size = 9, hjust = 0),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(
+    data = subclass_long_experienced,
+    aes(
+      label = ifelse(Metric == "Agreement %", 
+                     paste0(round(Value, 1), "%"), 
+                     paste0(round(Value, 1))),
+      group = Fill,
+      color = Metric
+    ),
+    position = position_dodge(width = 0.7),
+    vjust = -0.5, 
+    size = 3, 
+    fontface = "bold"
+  ) +
+  scale_color_manual(
+    values = c("Agreement %" = "black", "Confidence" = "gray50"),
+    guide = "none"
+  )
+```
+
+

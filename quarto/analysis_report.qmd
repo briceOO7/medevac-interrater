@@ -1,0 +1,183 @@
+---
+title: "Medevac Interrater Reliability Analysis"
+subtitle: "Physician Decision-Making in Clinical Vignettes"
+author: "Medevac Interrater Study Team"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    theme: cosmo
+    fig-width: 10
+    fig-height: 6
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Source analysis functions
+source(here::here("R", "R", "analysis.R"))
+
+# Paths
+data_dir <- here::here("data", "processed")
+output_dir <- here::here("output")
+```
+
+## Introduction
+
+This report presents the interrater reliability analysis for physician medevac decision-making using standardized clinical vignettes. The study involved 20 physicians evaluating 20 clinical scenarios, selecting one of three management options:
+
+- **Medevac**: Immediate medical evacuation
+- **Commercial**: Next available commercial flight
+- **Remain**: Remain in village for ongoing observation or treatment
+
+## Data Overview
+
+```{r data-overview}
+# Load processed data
+data <- read.csv(file.path(data_dir, "survey_data_processed.csv"), 
+                 stringsAsFactors = FALSE)
+
+cat("**Data Summary:**\n\n")
+cat(sprintf("- Total responses: %d\n", nrow(data)))
+cat(sprintf("- Physicians: %d\n", length(unique(data$physician_id))))
+cat(sprintf("- Vignettes: %d\n", length(unique(data$question))))
+cat(sprintf("- Vignette classes: %s\n", paste(unique(data$vignette_class), collapse = ", ")))
+```
+
+### Decision Distribution
+
+```{r decision-distribution}
+decision_summary <- data %>%
+  group_by(decision) %>%
+  summarize(
+    Count = n(),
+    Percentage = round(n() / nrow(data) * 100, 1)
+  ) %>%
+  arrange(desc(Count))
+
+kable(decision_summary, caption = "Overall Decision Distribution") %>%
+  kable_styling()
+```
+
+```{r decision-plot}
+ggplot(data, aes(x = decision, fill = decision)) +
+  geom_bar() +
+  labs(
+    title = "Decision Distribution",
+    x = "Decision",
+    y = "Count"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Interrater Reliability
+
+### Overall Agreement
+
+```{r overall-agreement}
+overall_pa <- calculate_percentage_agreement(data, question_id = NULL)
+cat(sprintf("**Overall Percentage Agreement: %.3f (%.1f%%)**\n\n", 
+            overall_pa, overall_pa * 100))
+```
+
+### Question-Level Metrics
+
+```{r question-metrics}
+question_metrics <- calculate_question_level_metrics(data)
+
+# Load from file if analysis script was run
+if (file.exists(file.path(output_dir, "question_level_metrics.csv"))) {
+  question_metrics <- read.csv(file.path(output_dir, "question_level_metrics.csv"))
+}
+
+kable(question_metrics, 
+      caption = "Interrater Reliability Metrics by Question",
+      digits = 3) %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+```
+
+### Agreement by Vignette Class
+
+```{r class-agreement}
+class_metrics <- calculate_agreement_by_class(data)
+
+# Load from file if analysis script was run
+if (file.exists(file.path(output_dir, "class_level_metrics.csv"))) {
+  class_metrics <- read.csv(file.path(output_dir, "class_level_metrics.csv"))
+}
+
+kable(class_metrics,
+      caption = "Agreement Metrics by Vignette Class",
+      digits = 3) %>%
+  kable_styling()
+```
+
+```{r class-agreement-plot}
+ggplot(class_metrics, aes(x = vignette_class, y = mean_percentage_agreement)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Mean Percentage Agreement by Vignette Class",
+    x = "Vignette Class",
+    y = "Mean Percentage Agreement"
+  ) +
+  theme_minimal() +
+  ylim(0, 1)
+```
+
+## Confidence Analysis
+
+```{r confidence-analysis}
+conf_analysis <- analyze_confidence(data)
+
+cat("### Confidence by Decision\n\n")
+kable(conf_analysis$by_decision,
+      caption = "Confidence Ratings by Decision Type") %>%
+  kable_styling()
+
+cat("\n### Confidence by Vignette Class\n\n")
+kable(conf_analysis$by_class,
+      caption = "Confidence Ratings by Vignette Class") %>%
+  kable_styling()
+```
+
+```{r confidence-plot}
+ggplot(data, aes(x = decision, y = confidence, fill = decision)) +
+  geom_boxplot() +
+  labs(
+    title = "Confidence Ratings by Decision Type",
+    x = "Decision",
+    y = "Confidence (1-10)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Summary
+
+- Overall agreement across all vignettes was `r round(overall_pa * 100, 1)`%
+- Mean Fleiss' Kappa: `r round(mean(question_metrics$fleiss_kappa, na.rm = TRUE), 3)`
+- Mean confidence rating: `r round(mean(data$confidence, na.rm = TRUE), 2)`/10
+
+The analysis reveals variation in agreement across different types of clinical scenarios, with higher agreement in clear-cut cases (Class A) compared to ambiguous scenarios (Class C).
+

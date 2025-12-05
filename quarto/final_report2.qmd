@@ -1,0 +1,871 @@
+---
+title: "Physician Medevac Propensity Analysis"
+subtitle: "Comprehensive Analysis of Clinical Appropriateness and Practice Variation"
+author: "Medevac Interrater Study Team"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    fig-width: 12
+    fig-height: 8
+    self-contained: true
+    code-fold: true
+    echo: false
+  pdf:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    fig-width: 12
+    fig-height: 8
+    keep-tex: false
+    echo: false
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 12,
+  fig.height = 8
+)
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(here)
+library(lme4)
+library(gridExtra)
+library(irrCAC)
+
+# Load raw survey data for affiliations
+raw_data <- read.csv(here::here("data", "survey_results.csv"), 
+                     stringsAsFactors = FALSE)
+
+# Load main processed data
+data <- read.csv(here::here("data", "processed", "survey_data_processed.csv"),
+                 stringsAsFactors = FALSE)
+
+# Load medevac normative mapping
+medevac_mapping <- read.csv(here::here("data", "medevac_normative_mapping.csv"),
+                             stringsAsFactors = FALSE)
+
+# Load physician experience data
+physician_experience <- read.csv(here::here("data", "physician_experience.csv"),
+                                 stringsAsFactors = FALSE)
+
+# Merge with main data
+data <- data %>%
+  left_join(medevac_mapping %>% select(question, medevac_normative_status, medevac_status_label),
+            by = "question") %>%
+  left_join(physician_experience %>% select(physician_id, years_experience),
+            by = "physician_id")
+
+# Create binary outcomes and centered predictors
+data <- data %>%
+  mutate(
+    # Primary outcome: chose medevac vs. not
+    chose_medevac = ifelse(decision == "Medevac", 1, 0),
+    # Set factor levels with Medevac Only Wrong as reference
+    medevac_status_label = factor(medevac_status_label,
+                                   levels = c("Medevac Only Wrong",
+                                            "Medevac One of Two Wrong",
+                                            "Ambiguous (All Plausible)",
+                                            "Medevac One of Two Correct",
+                                            "Medevac Only Correct")),
+    # Center continuous predictors for interpretation
+    confidence_centered = confidence - mean(confidence, na.rm = TRUE),
+    years_experience_centered = years_experience - mean(years_experience, na.rm = TRUE)
+  )
+```
+
+# Executive Summary
+
+This report examines physician variation in medevac decision-making through the lens of **clinical appropriateness**, with explicit modeling of **confidence** and **years of experience**.
+
+We categorize all 20 vignettes by **vignette type** (appropriateness of the medevac option):
+
+- **Medevac Only Correct** (n=4): Medevac is the single best answer
+- **Medevac One of Two Correct** (n=5): Medevac is appropriate, along with one other option
+- **Ambiguous (All Plausible)** (n=3): All three options are reasonable
+- **Medevac One of Two Wrong** (n=4): Medevac is inappropriate; two other options are reasonable
+- **Medevac Only Wrong** (n=4): Medevac is the single worst answer
+
+**Statistical Model**: Binary mixed-effects logistic regression
+- Outcome: Chose medevac vs. not
+- Fixed effects: Vignette type + Confidence (centered) + Experience (centered)
+- Random effects: Physician + Vignette
+- No interaction terms (for simplicity)
+
+**Key Findings:**
+
+1. **Strong appropriateness gradient**
+   - Odds of choosing medevac increase systematically from "Only Wrong" to "Only Correct"
+   - Strong evidence of appropriate clinical reasoning
+
+2. **Confidence and experience effects**
+   - Confidence significantly predicts medevac choice
+   - Experience shows positive trend
+   - Together explain meaningful physician variance
+
+3. **Substantial residual variation persists**
+   - Even after accounting for appropriateness, confidence, and experience
+   - Suggests additional unmeasured factors influence decision-making
+
+---
+
+# Table 1: Sample Characteristics and Study Design
+
+```{r table1-expanded}
+
+# Vignette counts by vignette type
+normative_counts <- data %>%
+  distinct(question, medevac_status_label) %>%
+  count(medevac_status_label) %>%
+  arrange(factor(medevac_status_label, 
+                 levels = c("Medevac Only Wrong", "Medevac One of Two Wrong",
+                            "Ambiguous (All Plausible)", "Medevac One of Two Correct",
+                            "Medevac Only Correct")))
+
+# Create physician summary statistics
+physician_summary <- data %>%
+  group_by(physician_id) %>%
+  summarise(
+    years_experience = first(years_experience),
+    n_responses = n(),
+    n_medevac = sum(decision == "Medevac"),
+    pct_medevac = 100 * mean(decision == "Medevac")
+  )
+
+# Build comprehensive table manually to avoid mismatch
+chars <- c(
+  "**Vignettes**",
+  "  Total Vignettes"
+)
+vals <- c(
+  "",
+  as.character(length(unique(data$question)))
+)
+
+# Add normative counts
+for(i in 1:nrow(normative_counts)) {
+  chars <- c(chars, paste0("  ", normative_counts$medevac_status_label[i]))
+  vals <- c(vals, sprintf("%d", normative_counts$n[i]))
+}
+
+# Add rest
+chars <- c(chars, "",
+           "**Physicians**",
+           "  Total Physicians",
+           "",
+           "**Responses**",
+           "  Total Responses",
+           "",
+           "**Years in Practice**",
+           "  Median [IQR]",
+           "  Mean (SD)",
+           "  Range",
+           "",
+           "**Confidence (1-10 scale)**",
+           "  Mean (SD)",
+           "  Median [IQR]",
+           "",
+           "**Medevac Selection**",
+           "  Overall % Choosing Medevac",
+           "  Range Across Physicians")
+
+vals <- c(vals, "",
+          "",
+          as.character(length(unique(data$physician_id))),
+          "",
+          "",
+          as.character(nrow(data)),
+          "",
+          "",
+          sprintf("%.0f [%.0f - %.0f]", 
+                  median(physician_summary$years_experience),
+                  quantile(physician_summary$years_experience, 0.25),
+                  quantile(physician_summary$years_experience, 0.75)),
+          sprintf("%.1f (%.1f)", mean(physician_summary$years_experience), 
+                  sd(physician_summary$years_experience)),
+          sprintf("%d - %d years", 
+                  min(physician_summary$years_experience),
+                  max(physician_summary$years_experience)),
+          "",
+          "",
+          sprintf("%.1f (%.1f)", mean(data$confidence, na.rm = TRUE), 
+                  sd(data$confidence, na.rm = TRUE)),
+          sprintf("%.0f [%.0f - %.0f]", 
+                  median(data$confidence, na.rm = TRUE),
+                  quantile(data$confidence, 0.25, na.rm = TRUE),
+                  quantile(data$confidence, 0.75, na.rm = TRUE)),
+          "",
+          "",
+          sprintf("%.1f%%", 100 * mean(data$chose_medevac)),
+          sprintf("%.1f%% - %.1f%%", 
+                  min(physician_summary$pct_medevac),
+                  max(physician_summary$pct_medevac)))
+
+summary_stats <- data.frame(
+  Characteristic = chars,
+  Value = vals
+)
+
+kable(summary_stats,
+      col.names = c("Characteristic", "Value"),
+      caption = "Table 1: Sample Characteristics and Study Design",
+      escape = FALSE) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  )
+```
+
+---
+
+# Figure 1: Response Distribution by Physician
+
+```{r create-physician-letter-mapping}
+# Create random letter assignment for physicians (A-Z)
+# Set seed for reproducibility
+set.seed(42)
+
+# Get all unique physician IDs
+all_physician_ids <- sort(unique(data$physician_id))
+
+# Create random letter assignment (A-Z)
+letters_available <- LETTERS[1:length(all_physician_ids)]
+random_letters <- sample(letters_available, length(all_physician_ids), replace = FALSE)
+
+# Create mapping dataframe
+physician_letter_map <- data.frame(
+  physician_id = all_physician_ids,
+  physician_letter = random_letters,
+  stringsAsFactors = FALSE
+)
+```
+
+```{r figure1-physician-horizontal}
+#| fig-height: 10
+#| fig-width: 12
+
+# Calculate proportion of each decision type for each physician
+physician_decisions <- data %>%
+  left_join(physician_letter_map, by = "physician_id") %>%
+  group_by(physician_letter) %>%
+  summarise(
+    Medevac = sum(decision == "Medevac"),
+    Commercial = sum(decision == "Commercial"),
+    Remain = sum(decision == "Remain"),
+    Total = n()
+  ) %>%
+  mutate(
+    pct_medevac = 100 * Medevac / Total,
+    pct_commercial = 100 * Commercial / Total,
+    pct_remain = 100 * Remain / Total
+  ) %>%
+  arrange(desc(pct_medevac))
+
+# Create long format for stacked bar
+physician_long <- physician_decisions %>%
+  select(Physician = physician_letter, Medevac = pct_medevac, 
+         Commercial = pct_commercial, Remain = pct_remain) %>%
+  pivot_longer(cols = c(Medevac, Commercial, Remain), 
+               names_to = "Decision", values_to = "Percentage")
+
+# Ensure correct factor ordering for stacking
+physician_long$Decision <- factor(physician_long$Decision,
+                                  levels = c("Remain", "Commercial", "Medevac"))
+
+# Reorder physicians by total medevac percentage
+physician_order <- physician_decisions %>%
+  arrange(pct_medevac) %>%
+  pull(physician_letter)
+
+physician_long$Physician <- factor(physician_long$Physician, levels = physician_order)
+
+# Create horizontal stacked bar chart
+ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
+  geom_col(position = "stack", width = 0.8) +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("Medevac" = "#E74C3C", "Commercial" = "#3498DB", "Remain" = "#2ECC71"),
+    name = "Decision",
+    breaks = c("Medevac", "Commercial", "Remain"),
+    labels = c("Medevac", "Commercial", "Remain")
+  ) +
+  labs(
+    title = "Figure 1: Response Distribution by Physician",
+    y = "Proportion of Responses (%)",
+    x = "Physician",
+    fill = "Decision"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1),
+                     limits = c(0, 100),
+                     breaks = seq(0, 100, 25)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 9),
+    legend.position = "bottom",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+---
+
+# Table 2: Descriptive Statistics by Vignette
+
+```{r table2-combined}
+# Use medevac_status_label directly (matches Table 1 classification)
+vignette_desc <- data %>%
+  group_by(question, medevac_status_label, question_type, vignette_class) %>%
+  summarise(
+    n = n(),
+    pct_medevac = 100 * sum(decision == "Medevac") / n,
+    pct_commercial = 100 * sum(decision == "Commercial") / n,
+    pct_remain = 100 * sum(decision == "Remain") / n,
+    mean_confidence = mean(confidence, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Create subclass names from original final_report
+    # Reclassify D as B first
+    vignette_class = ifelse(vignette_class == "D", "B", vignette_class),
+    vignette_type = case_when(
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac Only",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial Only",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain Only",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial",
+      vignette_class == "B" & grepl("Conflict", question_type) ~ "Medevac or Remain",
+      vignette_class == "C" ~ "All Options Reasonable",
+      TRUE ~ as.character(question_type)
+    ),
+    # Find modal decision
+    modal_decision = case_when(
+      pct_medevac >= pct_commercial & pct_medevac >= pct_remain ~ "Medevac",
+      pct_commercial >= pct_medevac & pct_commercial >= pct_remain ~ "Commercial",
+      TRUE ~ "Remain"
+    ),
+    # Calculate agreement percentage (% choosing modal)
+    agreement_pct = case_when(
+      modal_decision == "Medevac" ~ pct_medevac,
+      modal_decision == "Commercial" ~ pct_commercial,
+      modal_decision == "Remain" ~ pct_remain
+    )
+  )
+
+# Calculate Gwet's AC1 for each vignette (FIXED - using approach from final_report)
+# Create wide format: one row per vignette, one column per physician
+ratings_wide <- data %>%
+  select(question, physician_id, decision) %>%
+  pivot_wider(
+    id_cols = question,
+    names_from = physician_id,
+    values_from = decision,
+    names_prefix = "Physician_"
+  )
+
+ac1_by_vignette <- data %>%
+  group_by(question) %>%
+  summarise(
+    decisions_vec = list(decision[!is.na(decision)]),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    decisions_vec = list(unlist(decisions_vec)),
+    n_decisions = length(decisions_vec),
+    n_unique = length(unique(decisions_vec)),
+    
+    gwet_ac1 = {
+      if (n_decisions == 0 || n_unique <= 1) {
+        if (n_decisions > 0 && n_unique == 1) {
+          1.0  # Perfect agreement
+        } else {
+          NA_real_  # Cannot compute
+        }
+      } else {
+        # Convert to numeric codes (1=Medevac, 2=Commercial, 3=Remain)
+        decision_codes <- as.numeric(factor(decisions_vec, levels = c("Medevac", "Commercial", "Remain")))
+        
+        # Create ratings matrix: 1 row (one vignette), multiple columns (raters/physicians)
+        ratings_matrix <- matrix(decision_codes, nrow = 1)
+        
+        # Calculate Gwet's AC1
+        ac1_result <- tryCatch({
+          result <- gwet.ac1.raw(ratings_matrix)
+          round(result$est$coeff.val, 3)
+        }, error = function(e) {
+          NA_real_
+        })
+        ac1_result
+      }
+    },
+    
+    ac1_interpretation = case_when(
+      is.na(gwet_ac1) && n_decisions == 0 ~ "Cannot compute",
+      !is.na(gwet_ac1) && gwet_ac1 == 1.0 ~ "Perfect",
+      is.na(gwet_ac1) ~ "Cannot compute",
+      gwet_ac1 < 0.00 ~ "None",
+      gwet_ac1 <= 0.20 ~ "Slight",
+      gwet_ac1 <= 0.40 ~ "Fair",
+      gwet_ac1 <= 0.60 ~ "Moderate",
+      gwet_ac1 <= 0.80 ~ "Good",
+      gwet_ac1 <= 0.99 ~ "Very Good",
+      TRUE ~ "Perfect"
+    )
+  ) %>%
+  ungroup() %>%
+  select(question, gwet_ac1, ac1_interpretation)
+
+# Join AC1 results to vignette_desc
+vignette_desc <- vignette_desc %>%
+  left_join(ac1_by_vignette, by = "question")
+
+# Create display table
+table2_display <- vignette_desc %>%
+  select(
+    `Vignette Type` = vignette_type,
+    `Q#` = question,
+    `Medevac %` = pct_medevac,
+    `Commercial %` = pct_commercial,
+    `Remain %` = pct_remain,
+    `Modal` = modal_decision,
+    `Agreement %` = agreement_pct,
+    `Gwet's AC1` = gwet_ac1,
+    Interpretation = ac1_interpretation,
+    `Mean Conf.` = mean_confidence,
+    # Keep medevac_status_label for grouping
+    medevac_status = medevac_status_label
+  )
+
+kable(table2_display %>% select(-medevac_status),
+      caption = "Table 2: Descriptive Statistics by Vignette",
+      align = c("l", "r", "r", "r", "r", "l", "r", "r", "l", "r"),
+      digits = c(0, 0, 1, 1, 1, 0, 1, 3, 0, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  ) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(7, bold = TRUE,
+              color = ifelse(table2_display$`Agreement %` >= 75, "darkgreen",
+                           ifelse(table2_display$`Agreement %` >= 50, "orange", "red"))) %>%
+  pack_rows("Medevac Only Wrong", 
+            min(which(table2_display$medevac_status == "Medevac Only Wrong")),
+            max(which(table2_display$medevac_status == "Medevac Only Wrong"))) %>%
+  pack_rows("Medevac One of Two Wrong", 
+            min(which(table2_display$medevac_status == "Medevac One of Two Wrong")),
+            max(which(table2_display$medevac_status == "Medevac One of Two Wrong"))) %>%
+  pack_rows("Ambiguous (All Plausible)", 
+            min(which(table2_display$medevac_status == "Ambiguous (All Plausible)")),
+            max(which(table2_display$medevac_status == "Ambiguous (All Plausible)"))) %>%
+  pack_rows("Medevac One of Two Correct", 
+            min(which(table2_display$medevac_status == "Medevac One of Two Correct")),
+            max(which(table2_display$medevac_status == "Medevac One of Two Correct"))) %>%
+  pack_rows("Medevac Only Correct", 
+            min(which(table2_display$medevac_status == "Medevac Only Correct")),
+            max(which(table2_display$medevac_status == "Medevac Only Correct")))
+```
+
+**Table 2 Notes:**
+- **Gwet's AC1**: Chance-corrected agreement statistic (robust to prevalence)
+- **Mean Conf.**: Average confidence rating (1-10 scale)
+- Vignettes grouped by vignette type (matching Table 1 classification)
+
+---
+
+# Primary Analysis
+
+## Mixed-Effects Model: Vignette Type + Confidence + Experience
+
+```{r model-primary}
+# Check correlation between experience and confidence
+cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs")
+
+# Primary model: vignette type + confidence + experience (both centered, no interaction)
+model_primary <- glmer(chose_medevac ~ medevac_status_label + 
+                  confidence_centered +
+                  years_experience_centered +
+                  (1 | physician_id) + (1 | question),
+                data = data,
+                family = binomial(link = "logit"),
+                control = glmerControl(optimizer = "bobyqa"))
+
+# Extract variance components
+vc <- as.data.frame(VarCorr(model_primary))
+var_physician <- vc$vcov[vc$grp == "physician_id"]
+var_vignette <- vc$vcov[vc$grp == "question"]
+var_residual <- pi^2 / 3  # Logistic distribution residual variance
+total_var <- var_physician + var_vignette + var_residual
+icc_physician <- var_physician / total_var
+icc_vignette <- var_vignette / total_var
+mor_physician <- exp(sqrt(2 * var_physician) * qnorm(0.75))
+
+# Get fixed effects
+fixed_effects <- fixef(model_primary)
+se <- sqrt(diag(vcov(model_primary)))
+or <- exp(fixed_effects)
+or_lower <- exp(fixed_effects - 1.96 * se)
+or_upper <- exp(fixed_effects + 1.96 * se)
+```
+
+**Note:** Experience and confidence are moderately correlated (r = `r sprintf("%.2f", cor_exp_conf)`), but both are included as mean-centered continuous predictors to capture their independent effects.
+
+## Table 3: Model Results - All Fixed Effects
+
+```{r table3-model-fixed}
+fixed_table <- data.frame(
+  Predictor = c(
+    "**Vignette Type**",
+    "  Medevac Only Wrong (reference)",
+    "  Medevac One of Two Wrong",
+    "  Ambiguous (All Plausible)",
+    "  Medevac One of Two Correct",
+    "  Medevac Only Correct",
+    "",
+    "**Decision Characteristics**",
+    "  Confidence (per 1-point increase)",
+    "  Years of Experience (per 1-year increase)"
+  ),
+  OR = c(NA, 1.00, or[2:5], NA, NA, or[6:7]),
+  CI_lower = c(NA, NA, or_lower[2:5], NA, NA, or_lower[6:7]),
+  CI_upper = c(NA, NA, or_upper[2:5], NA, NA, or_upper[6:7]),
+  p_value = c("", "ref", 
+              ifelse(abs(fixed_effects[2:5] / se[2:5]) > 1.96, "< 0.05", "> 0.05"),
+              "", "", 
+              ifelse(abs(fixed_effects[6:7] / se[6:7]) > 1.96, "< 0.05", "> 0.05"))
+) %>%
+  mutate(
+    OR_display = case_when(
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**") ~ "",
+      Predictor == "  Medevac Only Wrong (reference)" ~ "1.00",
+      !is.na(OR) ~ sprintf("%.2f", OR),
+      TRUE ~ ""
+    ),
+    CI_display = case_when(
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**") ~ "",
+      Predictor == "  Medevac Only Wrong (reference)" ~ "ref",
+      !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
+      TRUE ~ ""
+    )
+  )
+
+kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_value),
+      col.names = c("Predictor", "Odds Ratio", "95% CI", "P-value"),
+      caption = "Table 3: Model Fixed Effects (Vignette Type + Confidence + Experience)",
+      align = c("l", "c", "c", "c"),
+      escape = FALSE) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  )
+```
+
+**Interpretation:**
+
+- **Confidence**: OR = `r sprintf("%.2f", or[6])` per 1-point increase (`r ifelse(abs(fixed_effects[6] / se[6]) > 1.96, "significant", "not significant")`)
+- **Experience**: OR = `r sprintf("%.2f", or[7])` per 1-year increase (`r ifelse(abs(fixed_effects[7] / se[7]) > 1.96, "significant", "not significant")`)
+
+---
+
+## Table 4: Model Results - Variance Components
+
+```{r table4-model-random}
+variance_table <- data.frame(
+  Component = c(
+    "**Random Effect Variances**",
+    "  Physician",
+    "  Vignette",
+    "",
+    "**Intraclass Correlations**",
+    "  ICC (Physician)",
+    "  ICC (Vignette)",
+    "",
+    "**Median Odds Ratio**",
+    "  MOR (Physician)"
+  ),
+  Estimate = c(
+    "",
+    sprintf("%.3f", var_physician),
+    sprintf("%.3f", var_vignette),
+    "",
+    "",
+    sprintf("%.1f%%", icc_physician * 100),
+    sprintf("%.1f%%", icc_vignette * 100),
+    "",
+    "",
+    sprintf("%.2f", mor_physician)
+  )
+)
+
+kable(variance_table,
+      col.names = c("Component", "Estimate"),
+      caption = "Table 4: Model Variance Components",
+      escape = FALSE) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  )
+```
+
+**Key Findings:**
+
+- ICC (Physician) = `r sprintf("%.1f%%", icc_physician * 100)`: Proportion of variance attributable to physician differences
+- MOR = `r sprintf("%.2f", mor_physician)`: Indicates substantial residual practice variation
+- Even after accounting for vignette appropriateness, confidence, and experience, meaningful physician-level differences persist
+
+---
+
+# Figures
+
+## Figure 2: Marginal Predicted Probabilities by Vignette Type
+
+```{r figure2-marginal-probs}
+#| fig-height: 6
+#| fig-width: 10
+
+# Calculate marginal predicted probabilities from primary model with standard errors
+categories <- c("Medevac Only Wrong",
+               "Medevac One of Two Wrong",
+               "Ambiguous (All Plausible)",
+               "Medevac One of Two Correct",
+               "Medevac Only Correct")
+
+# Get variance-covariance matrix
+vcov_mat <- vcov(model_primary)
+
+# Calculate predicted log-odds and standard errors for each category
+pred_logodds <- c(
+  fixed_effects[1],  # Reference
+  fixed_effects[1] + fixed_effects[2],
+  fixed_effects[1] + fixed_effects[3],
+  fixed_effects[1] + fixed_effects[4],
+  fixed_effects[1] + fixed_effects[5]
+)
+
+# Calculate standard errors using delta method
+se_logodds <- c(
+  sqrt(vcov_mat[1,1]),  # Reference: just intercept variance
+  sqrt(vcov_mat[1,1] + vcov_mat[2,2] + 2*vcov_mat[1,2]),  # Intercept + coef2 + covariance
+  sqrt(vcov_mat[1,1] + vcov_mat[3,3] + 2*vcov_mat[1,3]),
+  sqrt(vcov_mat[1,1] + vcov_mat[4,4] + 2*vcov_mat[1,4]),
+  sqrt(vcov_mat[1,1] + vcov_mat[5,5] + 2*vcov_mat[1,5])
+)
+
+# Calculate 95% CI on log-odds scale
+logodds_lower <- pred_logodds - 1.96 * se_logodds
+logodds_upper <- pred_logodds + 1.96 * se_logodds
+
+# Transform to probability scale
+marginal_plot_data <- data.frame(
+  category = factor(categories, levels = categories),
+  category_num = 1:5,  # For x-axis positioning
+  predicted = plogis(pred_logodds),
+  lower = plogis(logodds_lower),
+  upper = plogis(logodds_upper)
+)
+
+ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
+  geom_line(color = "#3498DB", size = 1.5) +
+  geom_point(color = "#3498DB", size = 4) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width = 0.15, size = 1, color = "#2C3E50") +
+  geom_text(aes(label = sprintf("%.1f%%", predicted * 100)),
+            vjust = -1.5, size = 4, fontface = "bold") +
+  labs(
+    title = "Figure 2: Appropriateness Gradient in Medevac Selection",
+    subtitle = "Model-estimated probability of choosing medevac by vignette type (with 95% CI)",
+    x = "Vignette Type",
+    y = "Predicted Probability of Choosing Medevac"
+  ) +
+  scale_x_continuous(breaks = 1:5, labels = categories) +
+  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  )
+```
+
+---
+
+## Figure 3: Physician-Level Variation
+
+```{r figure3-physician-caterpillar}
+#| fig-height: 10
+#| fig-width: 12
+
+# Extract physician random effects from primary model
+ranef_model <- ranef(model_primary, condVar = TRUE)
+physician_re <- ranef_model$physician_id
+physician_se <- sqrt(attr(physician_re, "postVar")[1, 1, ])
+
+physician_predictions <- data.frame(
+  physician_id = rownames(physician_re),
+  re = physician_re[, 1],
+  se = physician_se
+) %>%
+  mutate(
+    logit_medevac = fixed_effects[1] + re,
+    prob_medevac = plogis(logit_medevac),
+    logit_lower = logit_medevac - 1.96 * se,
+    logit_upper = logit_medevac + 1.96 * se,
+    prob_lower = plogis(logit_lower),
+    prob_upper = plogis(logit_upper)
+  ) %>%
+  arrange(prob_medevac) %>%
+  mutate(rank = row_number())
+
+# Dynamic y-axis
+y_max <- max(physician_predictions$prob_upper) * 1.05
+y_min <- max(0, min(physician_predictions$prob_lower) * 0.95)
+
+ggplot(physician_predictions, aes(x = rank, y = prob_medevac)) +
+  geom_hline(yintercept = plogis(fixed_effects[1]), 
+             linetype = "dashed", color = "#E74C3C", size = 1) +
+  geom_point(size = 3, color = "#2C3E50") +
+  geom_errorbar(aes(ymin = prob_lower, ymax = prob_upper), 
+                width = 0.3, alpha = 0.7, color = "#2C3E50") +
+  annotate("text", x = max(physician_predictions$rank) * 0.85, 
+           y = plogis(fixed_effects[1]) + (y_max - y_min) * 0.08,
+           label = "Average physician", 
+           color = "#E74C3C", size = 4, fontface = "italic") +
+  labs(
+    title = "Figure 3: Physician-Level Variation",
+    subtitle = "Adjusted for vignette type, confidence, and experience",
+    x = "Physician (ordered by adjusted medevac propensity)",
+    y = "Adjusted Probability of Choosing Medevac"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(), limits = c(y_min, y_max)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 10),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+**Figure 3 Interpretation:** After accounting for vignette appropriateness, confidence, and experience, residual physician variation ranges from `r sprintf("%.1f%%", min(physician_predictions$prob_medevac) * 100)` to `r sprintf("%.1f%%", max(physician_predictions$prob_medevac) * 100)`. The MOR of `r sprintf("%.2f", mor_physician)` indicates factors beyond measured covariates contribute to practice variation.
+
+---
+
+## Figure 4: Appropriateness Calibration by Physician
+
+```{r figure4-calibration}
+#| fig-height: 10
+#| fig-width: 12
+
+# Extract physician random effects from primary model
+ranef_model <- ranef(model_primary, condVar = TRUE)
+physician_re <- ranef_model$physician_id
+
+# Calculate physician predictions for anchor categories
+physician_re_df <- data.frame(
+  physician_id = rownames(physician_re),
+  physician_re = physician_re[, 1]
+)
+
+medevac_only_correct_effect <- fixed_effects["medevac_status_labelMedevac Only Correct"]
+
+physician_calibration <- physician_re_df %>%
+  mutate(
+    prob_wrong = plogis(fixed_effects[1] + physician_re),
+    prob_correct = plogis(fixed_effects[1] + medevac_only_correct_effect + physician_re)
+  )
+
+# Merge with experience for coloring
+physician_calibration <- physician_calibration %>%
+  mutate(physician_id = as.integer(physician_id)) %>%
+  left_join(physician_experience, by = "physician_id")
+
+ggplot(physician_calibration, aes(x = prob_wrong, y = prob_correct, color = years_experience)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50", size = 1) +
+  geom_point(size = 4, alpha = 0.8) +
+  geom_text(aes(label = physician_id), hjust = -0.2, vjust = -0.5, size = 3, show.legend = FALSE) +
+  scale_color_gradient(low = "#3498DB", high = "#E74C3C", name = "Years\nExperience") +
+  annotate("text", x = 0.15, y = 0.15,
+           label = "No discrimination\n(diagonal)", 
+           angle = 45, size = 4, fontface = "italic", color = "gray50") +
+  annotate("text", x = 0.15, y = 0.85,
+           label = "Good discrimination\n(above diagonal)", 
+           size = 4, fontface = "bold", color = "#27AE60") +
+  labs(
+    title = "Figure 4: Physician Appropriateness Calibration",
+    subtitle = "Medevac propensity when 'Only Wrong' vs. 'Only Correct' (colored by experience)",
+    x = "Predicted Prob. When Medevac Only Wrong",
+    y = "Predicted Prob. When Medevac Only Correct"
+  ) +
+  scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+```
+
+**Figure 4 Interpretation:** Most physicians are above the diagonal (appropriate discrimination). Distance from diagonal reflects calibration strength. Color shows years of experience - examining whether more experienced physicians show stronger calibration.
+
+---
+
+# Key Findings
+
+**1. Strong appropriateness gradient exists** (Table 3, Figure 2)
+   - Odds of choosing medevac increase systematically with appropriateness
+   - Strong evidence of appropriate clinical reasoning
+
+**2. Confidence and experience effects**
+   - **Confidence**: OR = `r sprintf("%.2f", or[6])` per 1-point increase
+   - **Experience**: OR = `r sprintf("%.2f", or[7])` per year
+
+**3. Substantial residual variation persists**
+   - ICC (Physician) = `r sprintf("%.1f%%", icc_physician * 100)` after accounting for appropriateness, confidence, and experience
+   - MOR = `r sprintf("%.2f", mor_physician)`
+   - Meaningful physician differences persist beyond measured covariates
+
+The calibration plot (Figure 4) provides an actionable tool for feedback: physicians can see whether they appropriately discriminate between different appropriateness scenarios.
+
+## Methodological Strengths
+
+- **Mixed-effects framework** accounts for clustering (physicians + vignettes)
+- **Explicit appropriateness modeling** moves beyond raw agreement
+- **Variance decomposition** quantifies sources of variation
+- **Multiple metrics** (ICC, MOR) for clinical interpretability
+
+## Implications
+
+This analysis suggests that while physicians generally respond appropriately to clinical scenarios, substantial **calibrated practice variation** remains. Understanding this variation is key to:
+
+1. **Quality improvement**: Identifying systematic patterns in clinical decision-making
+2. **Education**: Targeting feedback to appropriateness calibration
+3. **Policy**: Accounting for legitimate variation vs. unwarranted variation

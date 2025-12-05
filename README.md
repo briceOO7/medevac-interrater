@@ -17,6 +17,13 @@ Vignettes are classified into four categories:
 
 ## 🚀 Quick Start
 
+### Workflow Overview
+
+This project uses a **Python → R** workflow:
+- **Python**: Data loading, cleaning, and processing
+- **R**: Statistical analysis and reporting
+- **Quarto**: Dynamic reports and documentation
+
 ### Setup
 
 1. **Clone the repository:**
@@ -25,35 +32,44 @@ Vignettes are classified into four categories:
    cd medevac_interrater
    ```
 
-2. **Create and activate virtual environment:**
+2. **Python Environment:**
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate  # On macOS/Linux
-   # or
-   .venv\Scripts\activate  # On Windows
-   ```
-
-3. **Install dependencies:**
-   ```bash
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
 
-### Development
+3. **R Dependencies:**
+   ```r
+   # In R or RStudio
+   install.packages(c("dplyr", "ggplot2", "irr", "knitr", "kableExtra", "here", "quarto"))
+   ```
 
+### Workflow
+
+#### Step 1: Process Data (Python)
 ```bash
-# Activate virtual environment
 source .venv/bin/activate
-
-# Run the analysis
-python scripts/run_analysis.py
-
-# Explore the data
-python scripts/explore_data.py
-
-# Run tests
-pytest
+python scripts/python/process_data.py
 ```
+This creates `data/processed/survey_data_processed.csv` for R analysis.
+
+#### Step 2: Run Analysis (R)
+```r
+# In R or RStudio
+source("scripts/r/run_analysis.R")
+```
+Or from command line:
+```bash
+Rscript scripts/r/run_analysis.R
+```
+
+#### Step 3: Generate Report (Quarto)
+```bash
+quarto render quarto/analysis_report.qmd
+```
+Or in RStudio, click "Render" on the `.qmd` file.
 
 ## 📈 Analysis Output
 
@@ -75,16 +91,28 @@ The analysis generates several output files in the `output/` directory:
 
 ```
 medevac_interrater/
-├── src/                    # Source code
-│   └── medevac_interrater/ # Main package
+├── data/
+│   ├── raw/                # Raw data files
+│   ├── processed/          # Processed data (Python output)
+│   └── survey_results.csv  # Original survey data
+├── scripts/
+│   ├── python/             # Python data processing scripts
+│   │   └── process_data.py # Main data processing script
+│   └── r/                  # R analysis scripts
+│       └── run_analysis.R  # Main analysis script
+├── R/
+│   └── R/                  # R package source
+│       └── analysis.R      # Analysis functions
+├── quarto/                 # Quarto documents
+│   └── analysis_report.qmd # Main analysis report
+├── output/                 # Analysis outputs (CSV files)
+├── src/                    # Python source code
+│   └── medevac_interrater/ # Python package
+│       └── data_loader.py  # Data loading/cleaning
 ├── tests/                  # Test files
-├── data/                   # Data files
-├── scripts/                # Executable scripts
-├── notebooks/              # Jupyter notebooks
-├── docs/                   # Documentation
-├── .venv/                  # Virtual environment (git-ignored)
-├── pyproject.toml          # Project configuration
-├── requirements.txt        # Dependencies
+├── .venv/                  # Python virtual environment
+├── requirements.txt        # Python dependencies
+├── requirements.R          # R package list
 └── README.md              # This file
 ```
 
@@ -102,3 +130,4 @@ pytest tests/ -v
 ## 👥 Contributors
 
 [Add contributors here]
+

@@ -1,0 +1,21 @@
+question,question_type,medevac_normative_status,medevac_status_label
+1,Clear Medevac,medevac_only_correct,Medevac Only Correct
+2,Clear Not Medevac,medevac_only_wrong,Medevac Only Wrong
+3,Any Option,ambiguous_all_plausible,Ambiguous (All Plausible)
+4,Clear Medevac,medevac_only_correct,Medevac Only Correct
+5,Clear Not Medevac,medevac_only_wrong,Medevac Only Wrong
+6,Clear Not Medevac,medevac_only_wrong,Medevac Only Wrong
+7,Clear Not Remain,medevac_one_of_two_correct,Medevac One of Two Correct
+8,Clear Remain,medevac_one_of_two_wrong,Medevac One of Two Wrong
+9,Clear Commercial,medevac_one_of_two_wrong,Medevac One of Two Wrong
+10,Clear Not Remain,medevac_one_of_two_correct,Medevac One of Two Correct
+11,Clear Remain,medevac_one_of_two_wrong,Medevac One of Two Wrong
+12,Any Option,ambiguous_all_plausible,Ambiguous (All Plausible)
+13,Clear Medevac,medevac_only_correct,Medevac Only Correct
+14,Clear Not Medevac,medevac_only_wrong,Medevac Only Wrong
+15,Clear Commercial,medevac_one_of_two_wrong,Medevac One of Two Wrong
+16,Conflict Between Physiology/Logistics,medevac_one_of_two_correct,Medevac One of Two Correct
+17,Conflict Between Physiology/Logistics,medevac_one_of_two_correct,Medevac One of Two Correct
+18,Conflict Between Physiology/Logistics,medevac_one_of_two_correct,Medevac One of Two Correct
+19,Clear Medevac,medevac_only_correct,Medevac Only Correct
+20,Any Option,ambiguous_all_plausible,Ambiguous (All Plausible)

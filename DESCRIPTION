@@ -1,0 +1,24 @@
+Package: medevacInterrater
+Type: Package
+Title: Medevac Interrater Reliability Analysis
+Version: 0.1.0
+Author: Brian Rice
+Maintainer: Brian Rice <your.email@example.com>
+Description: Analysis tools for interrater reliability in physician medevac decision-making.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
+Imports:
+    stats,
+    utils
+Suggests:
+    knitr,
+    rmarkdown,
+    ggplot2,
+    dplyr,
+    irr,
+    kableExtra,
+    here
+Roxygen: list(markdown = TRUE)
+

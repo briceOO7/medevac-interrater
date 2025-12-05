@@ -27,7 +27,7 @@
 | Question | Question Type | Vignette Class |
 |----------|--------------|----------------|
 | 1 | Clear Medevac | A |
-| 2 | Clear Not Medevac | A |
+| 2 | Clear Not Medevac | B |
 | 3 | Any Option | C |
 | 4 | Clear Medevac | A |
 | 5 | Clear Not Medevac | B |
@@ -63,10 +63,10 @@ The study involves:
 
 2. **By Vignette Class**
    - Compare reliability across classes A, B, C, D
-   - Class A: Clear cases (expected high agreement)
-   - Class B: Clear not-X cases (expected high agreement)
-   - Class C: Any option acceptable (expected lower agreement)
-   - Class D: Conflict cases (expected lower agreement)
+   - Class A: Clear affirmative cases - Clear Medevac, Clear Commercial, Clear Remain (expected high agreement)
+   - Class B: Clear "NOT" cases - all question types with "Not" (expected high agreement)
+   - Class C: Any option acceptable - ambiguous cases (expected lower agreement)
+   - Class D: Conflict cases - physiology vs logistics (expected lower agreement)
 
 3. **Confidence Analysis**
    - Relationship between confidence and agreement
