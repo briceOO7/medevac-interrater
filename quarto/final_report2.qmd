@@ -528,7 +528,7 @@ table2_kable
 ```
 
 **Table 2 Notes:**
-- **Gwet's AC1**: Chance-corrected agreement statistic (robust to prevalence)
+- **Gwet's AC1**: Chance-corrected agreement statistic chosen over Cohen's Kappa due to superior performance with class imbalance. AC1 is less affected by prevalence and marginal probability asymmetry, making it more appropriate when decision options have unequal base rates across vignettes
 - **Median Conf. [IQR]**: Median confidence rating with interquartile range (1-10 scale)
 - Vignettes grouped by vignette type (matching Table 1 classification)
 
