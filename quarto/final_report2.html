@@ -2408,9 +2408,6 @@ border: 0;
   <li><a href="#mixed-effects-model-vignette-type-confidence-experience" id="toc-mixed-effects-model-vignette-type-confidence-experience" class="nav-link" data-scroll-target="#mixed-effects-model-vignette-type-confidence-experience">Mixed-Effects Model: Vignette Type + Confidence + Experience</a></li>
   <li><a href="#table-3-model-results---all-fixed-effects" id="toc-table-3-model-results---all-fixed-effects" class="nav-link" data-scroll-target="#table-3-model-results---all-fixed-effects">Table 3: Model Results - All Fixed Effects</a></li>
   <li><a href="#table-4-model-results---variance-components" id="toc-table-4-model-results---variance-components" class="nav-link" data-scroll-target="#table-4-model-results---variance-components">Table 4: Model Results - Variance Components</a></li>
-  </ul></li>
-  <li><a href="#figures" id="toc-figures" class="nav-link" data-scroll-target="#figures">Figures</a>
-  <ul class="collapse">
   <li><a href="#figure-3-physician-level-variation" id="toc-figure-3-physician-level-variation" class="nav-link" data-scroll-target="#figure-3-physician-level-variation">Figure 3: Physician-Level Variation</a></li>
   <li><a href="#figure-4-appropriateness-calibration-by-physician" id="toc-figure-4-appropriateness-calibration-by-physician" class="nav-link" data-scroll-target="#figure-4-appropriateness-calibration-by-physician">Figure 4: Appropriateness Calibration by Physician</a></li>
   </ul></li>
@@ -2901,7 +2898,7 @@ border: 0;
 </table>
 </div>
 </div>
-<p><strong>Table 2 Notes:</strong> - <strong>Gwet’s AC1</strong>: Chance-corrected agreement statistic (robust to prevalence) - <strong>Median Conf. [IQR]</strong>: Median confidence rating with interquartile range (1-10 scale) - Vignettes grouped by vignette type (matching Table 1 classification)</p>
+<p><strong>Table 2 Notes:</strong> - <strong>Gwet’s AC1</strong>: Chance-corrected agreement statistic chosen over Cohen’s Kappa due to superior performance with class imbalance. AC1 is less affected by prevalence and marginal probability asymmetry, making it more appropriate when decision options have unequal base rates across vignettes - <strong>Median Conf. [IQR]</strong>: Median confidence rating with interquartile range (1-10 scale) - Vignettes grouped by vignette type (matching Table 1 classification)</p>
 <hr>
 </section>
 <section id="figure-2-appropriateness-gradient" class="level1">
@@ -3082,9 +3079,6 @@ border: 0;
 </ul>
 <hr>
 </section>
-</section>
-<section id="figures" class="level1">
-<h1>Figures</h1>
 <section id="figure-3-physician-level-variation" class="level2">
 <h2 class="anchored" data-anchor-id="figure-3-physician-level-variation">Figure 3: Physician-Level Variation</h2>
 <div class="cell">
