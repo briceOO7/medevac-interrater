@@ -22,6 +22,11 @@ format:
     fig-height: 8
     keep-tex: false
     echo: false
+    include-in-header:
+      text: |
+        \usepackage{xcolor}
+        \definecolor{darkgreen}{RGB}{0,100,0}
+        \definecolor{orange}{RGB}{255,165,0}
 ---
 
 ```{r setup}
@@ -749,8 +754,8 @@ kable(variance_table,
 
 **Key Findings:**
 
-- ICC (Physician) = `r sprintf("%.1f%%", icc_physician * 100)`: Proportion of variance attributable to physician differences
-- MOR = `r sprintf("%.2f", mor_physician)`: Indicates substantial residual practice variation
+- **ICC (Physician)** = `r sprintf("%.1f%%", icc_physician * 100)`: Proportion of total variance attributable to physician differences
+- **MOR (Median Odds Ratio)** = `r sprintf("%.2f", mor_physician)`: The median increase in odds of choosing medevac when comparing a randomly selected physician with higher propensity to one with lower propensity. An MOR of `r sprintf("%.2f", mor_physician)` means that if two identical patients saw two randomly selected physicians, the odds of receiving medevac would differ by a factor of `r sprintf("%.2f", mor_physician)` on average (50% of the time)
 - Even after accounting for vignette appropriateness, confidence, and experience, meaningful physician-level differences persist
 
 ---
