@@ -65,11 +65,17 @@ medevac_mapping <- read.csv(here::here("data", "medevac_normative_mapping.csv"),
 physician_experience <- read.csv(here::here("data", "physician_experience.csv"),
                                  stringsAsFactors = FALSE)
 
+# Load rural experience data
+rural_experience <- read.csv(here::here("data", "rural_experience.csv"),
+                             stringsAsFactors = FALSE)
+
 # Merge with main data
 data <- data %>%
   left_join(medevac_mapping %>% select(question, medevac_normative_status, medevac_status_label),
             by = "question") %>%
   left_join(physician_experience %>% select(physician_id, years_experience),
+            by = "physician_id") %>%
+  left_join(rural_experience %>% select(physician_id, rural_experience),
             by = "physician_id")
 
 # Create binary outcomes and centered predictors
@@ -84,6 +90,8 @@ data <- data %>%
                                             "Ambiguous (All Plausible)",
                                             "Medevac One of Two Correct",
                                             "Always Medevac")),
+    # Factor rural experience
+    rural_experience = factor(rural_experience, levels = c("No", "Yes")),
     # Center continuous predictors for interpretation
     confidence_centered = confidence - mean(confidence, na.rm = TRUE),
     years_experience_centered = years_experience - mean(years_experience, na.rm = TRUE)
@@ -180,10 +188,21 @@ physician_summary <- data %>%
   group_by(physician_id) %>%
   summarise(
     years_experience = first(years_experience),
+    rural_experience = first(rural_experience),
     n_responses = n(),
     n_medevac = sum(decision == "Medevac"),
     pct_medevac = 100 * mean(decision == "Medevac")
   )
+
+# Calculate rural experience counts
+rural_exp_summary <- physician_summary %>%
+  count(rural_experience)
+
+n_rural_yes <- rural_exp_summary %>% filter(rural_experience == "Yes") %>% pull(n)
+n_rural_no <- rural_exp_summary %>% filter(rural_experience == "No") %>% pull(n)
+n_physicians <- length(unique(data$physician_id))
+pct_rural_yes <- 100 * n_rural_yes / n_physicians
+pct_rural_no <- 100 * n_rural_no / n_physicians
 
 # Calculate correct responses to Always/Never Medevac vignettes
 correct_responses <- data %>%
@@ -212,13 +231,17 @@ chars <- c(
   "  Median [IQR]",
   "  Range",
   "",
+  "**Rural Experience**",
+  "  Yes",
+  "  No",
+  "",
   "**Vignettes**",
   "  Total Vignettes"
 )
 
 vals <- c(
   "",
-  as.character(length(unique(data$physician_id))),
+  as.character(n_physicians),
   "",
   "",
   sprintf("%.0f [%.0f - %.0f]", 
@@ -228,6 +251,10 @@ vals <- c(
   sprintf("%d - %d years", 
           min(physician_summary$years_experience),
           max(physician_summary$years_experience)),
+  "",
+  "",
+  sprintf("%d (%.0f%%)", n_rural_yes, pct_rural_yes),
+  sprintf("%d (%.0f%%)", n_rural_no, pct_rural_no),
   "",
   "",
   as.character(length(unique(data$question)))
@@ -625,6 +652,7 @@ table2_kable
 model_for_fig2 <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_centered +
                   years_experience_centered +
+                  rural_experience +
                   (1 | physician_id) + (1 | question),
                 data = data,
                 family = binomial(link = "logit"),
@@ -708,10 +736,11 @@ ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
 # Check correlation between experience and confidence
 cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs")
 
-# Primary model: vignette type + confidence + experience (both centered, no interaction)
+# Primary model: vignette type + confidence + experience + rural experience (no interaction)
 model_primary <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_centered +
                   years_experience_centered +
+                  rural_experience +
                   (1 | physician_id) + (1 | question),
                 data = data,
                 family = binomial(link = "logit"),
@@ -764,20 +793,20 @@ fixed_table <- data.frame(
 ) %>%
   mutate(
     OR_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**") ~ "",
-      Predictor == "  Never Medevac (reference)" ~ "1.00",
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Setting**") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "  Rural Experience: No (reference)") ~ "1.00",
       !is.na(OR) ~ sprintf("%.2f", OR),
       TRUE ~ ""
     ),
     CI_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**") ~ "",
-      Predictor == "  Never Medevac (reference)" ~ "ref",
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Setting**") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "  Rural Experience: No (reference)") ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
     ),
     p_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**") ~ "",
-      Predictor == "  Never Medevac (reference)" ~ "ref",
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Setting**") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "  Rural Experience: No (reference)") ~ "ref",
       is.na(p_value_raw) ~ "",
       p_value_raw < 0.001 ~ "<0.001*",
       p_value_raw < 0.05 ~ sprintf("%.3f*", p_value_raw),
