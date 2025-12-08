@@ -784,12 +784,16 @@ fixed_table <- data.frame(
     "",
     "**Decision Characteristics**",
     "  Confidence (per 1-point increase)",
-    "  Years of Experience (per 1-year increase)"
+    "  Years of Experience (per 1-year increase)",
+    "",
+    "**Practice Setting**",
+    "  Rural Experience: No (reference)",
+    "  Rural Experience: Yes"
   ),
-  OR = c(NA, 1.00, or[2:5], NA, NA, or[6:7]),
-  CI_lower = c(NA, NA, or_lower[2:5], NA, NA, or_lower[6:7]),
-  CI_upper = c(NA, NA, or_upper[2:5], NA, NA, or_upper[6:7]),
-  p_value_raw = c(NA, NA, p_values[2:5], NA, NA, p_values[6:7])
+  OR = c(NA, 1.00, or[2:5], NA, NA, or[6:7], NA, NA, 1.00, or[8]),
+  CI_lower = c(NA, NA, or_lower[2:5], NA, NA, or_lower[6:7], NA, NA, NA, or_lower[8]),
+  CI_upper = c(NA, NA, or_upper[2:5], NA, NA, or_upper[6:7], NA, NA, NA, or_upper[8]),
+  p_value_raw = c(NA, NA, p_values[2:5], NA, NA, p_values[6:7], NA, NA, NA, p_values[8])
 ) %>%
   mutate(
     OR_display = case_when(
