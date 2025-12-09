@@ -809,8 +809,8 @@ ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
 
 ### Summary Statistics by Vignette Type
 
-```{r figure3-panels}
-#| fig-height: 10
+```{r figure3-combined-lines}
+#| fig-height: 7
 #| fig-width: 12
 
 # Calculate summary statistics by vignette type
@@ -828,59 +828,79 @@ vignette_summary <- data %>%
     .groups = "drop"
   ) %>%
   mutate(
+    # Scale confidence to 0-100 scale for comparability
+    confidence_scaled = mean_confidence * 10,
+    confidence_lower = (mean_confidence - 1.96 * se_confidence) * 10,
+    confidence_upper = (mean_confidence + 1.96 * se_confidence) * 10,
     agreement_lower = mean_agreement - 1.96 * se_agreement,
     agreement_upper = mean_agreement + 1.96 * se_agreement,
-    confidence_lower = mean_confidence - 1.96 * se_confidence,
-    confidence_upper = mean_confidence + 1.96 * se_confidence
+    medevac_lower = pct_medevac - 1.96 * se_medevac,
+    medevac_upper = pct_medevac + 1.96 * se_medevac,
+    category_num = row_number()
   )
 
-# Panel A: Agreement
-p_agreement <- ggplot(vignette_summary, aes(x = medevac_status_label, y = mean_agreement)) +
-  geom_col(fill = "#3498DB", alpha = 0.7) +
-  geom_errorbar(aes(ymin = agreement_lower, ymax = agreement_upper), 
-                width = 0.3, size = 1) +
-  geom_text(aes(label = sprintf("%.1f%%", mean_agreement)),
-            vjust = -1.5, size = 4, fontface = "bold") +
+# Reshape for plotting
+plot_data <- vignette_summary %>%
+  select(medevac_status_label, category_num, 
+         Agreement = mean_agreement, agreement_lower, agreement_upper,
+         `Confidence (scaled)` = confidence_scaled, confidence_lower, confidence_upper,
+         `Medevac Selected` = pct_medevac, medevac_lower, medevac_upper) %>%
+  pivot_longer(
+    cols = c(Agreement, `Confidence (scaled)`, `Medevac Selected`),
+    names_to = "Metric",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Lower = case_when(
+      Metric == "Agreement" ~ agreement_lower,
+      Metric == "Confidence (scaled)" ~ confidence_lower,
+      Metric == "Medevac Selected" ~ medevac_lower
+    ),
+    Upper = case_when(
+      Metric == "Agreement" ~ agreement_upper,
+      Metric == "Confidence (scaled)" ~ confidence_upper,
+      Metric == "Medevac Selected" ~ medevac_upper
+    )
+  )
+
+ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metric)) +
+  geom_line(size = 1.5) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), 
+                width = 0.2, size = 1, alpha = 0.7) +
+  scale_color_manual(
+    values = c("Agreement" = "#3498DB",
+               "Confidence (scaled)" = "#E67E22",
+               "Medevac Selected" = "#27AE60"),
+    name = NULL
+  ) +
   labs(
-    title = "A. Inter-Rater Agreement",
-    x = NULL,
-    y = "Agreement (%)"
+    title = "Agreement, Confidence, and Medevac Selection by Vignette Type",
+    subtitle = "Note: Confidence rescaled to 0-100 scale for comparison (original 1-10 scale × 10)",
+    x = "Vignette Type",
+    y = "Percentage / Scaled Score"
+  ) +
+  scale_x_continuous(
+    breaks = 1:4,
+    labels = c("Never\nMedevac", "Possible\nMedevac", "Special\nConsiderations", "Always\nMedevac")
   ) +
   scale_y_continuous(limits = c(0, 105), breaks = seq(0, 100, 20)) +
-  theme_minimal(base_size = 12) +
+  theme_minimal(base_size = 13) +
   theme(
-    plot.title = element_text(face = "bold", size = 13),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray30"),
+    axis.title = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(size = 10),
+    legend.position = "bottom",
+    legend.text = element_text(size = 11),
     panel.grid.minor = element_blank()
   )
-
-# Panel B: Confidence
-p_confidence <- ggplot(vignette_summary, aes(x = medevac_status_label, y = mean_confidence)) +
-  geom_col(fill = "#E67E22", alpha = 0.7) +
-  geom_errorbar(aes(ymin = confidence_lower, ymax = confidence_upper), 
-                width = 0.3, size = 1) +
-  geom_text(aes(label = sprintf("%.1f", mean_confidence)),
-            vjust = -1.5, size = 4, fontface = "bold") +
-  labs(
-    title = "B. Mean Confidence",
-    x = "Vignette Type",
-    y = "Confidence (1-10 scale)"
-  ) +
-  scale_y_continuous(limits = c(0, 11), breaks = seq(0, 10, 2)) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(face = "bold", size = 13),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-    panel.grid.minor = element_blank()
-  )
-
-# Combine panels
-grid.arrange(p_agreement, p_confidence, ncol = 1)
 ```
 
 **Key Patterns:**
-- **Agreement**: Higher agreement on clear-cut cases (Always/Never Medevac)
-- **Confidence**: Physicians are most confident on cases where medevac is clearly indicated (Always Medevac)
+- **Agreement** (blue): Higher on clear-cut cases (Always/Never Medevac)
+- **Confidence** (orange, scaled): Highest when medevac is clearly indicated (Always Medevac)
+- **Medevac Selection** (green): Strong gradient from Never (0%) to Always (100%)
 - Error bars show 95% confidence intervals
 
 ---
