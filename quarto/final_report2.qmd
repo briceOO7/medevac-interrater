@@ -904,7 +904,7 @@ fixed_table <- data.frame(
 
 kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
       col.names = c("Predictor", "Odds Ratio", "95% CI", "P-value"),
-      caption = "Table 3: Model Fixed Effects (Vignette Type + Confidence + Experience)",
+      caption = "Table 3: Likelihood to Medevac",
       align = c("l", "c", "c", "c"),
       escape = FALSE) %>%
   kable_styling(
