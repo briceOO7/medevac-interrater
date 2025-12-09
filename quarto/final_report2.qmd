@@ -91,9 +91,25 @@ data <- data %>%
                                             "Always Medevac")),
     # Factor practice location with Referral Hub as reference
     practice_location = factor(practice_location, 
-                              levels = c("Referral Hub", "Regional Hub", "Mixed")),
-    # Center continuous predictors for interpretation
-    confidence_centered = confidence - mean(confidence, na.rm = TRUE),
+                              levels = c("Referral Hub", "Regional Hub", "Mixed"))
+  )
+
+# Calculate within-between decomposition for confidence
+physician_mean_confidence <- data %>%
+  group_by(physician_id) %>%
+  summarise(physician_mean_conf = mean(confidence, na.rm = TRUE)) %>%
+  ungroup()
+
+grand_mean_confidence <- mean(data$confidence, na.rm = TRUE)
+
+data <- data %>%
+  left_join(physician_mean_confidence, by = "physician_id") %>%
+  mutate(
+    # Within-person: Deviation from own mean
+    confidence_within = confidence - physician_mean_conf,
+    # Between-person: Physician's mean relative to grand mean
+    confidence_between = physician_mean_conf - grand_mean_confidence,
+    # Years experience (grand-mean centered)
     years_experience_centered = years_experience - mean(years_experience, na.rm = TRUE)
   )
 ```
@@ -715,8 +731,10 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
 # Use a placeholder approach by computing inline
 
 # Quick model for this figure (will be same as primary model below)
+# Using within-between confidence decomposition
 model_for_fig3 <- glmer(chose_medevac ~ medevac_status_label + 
-                  confidence_centered +
+                  confidence_within +
+                  confidence_between +
                   years_experience_centered +
                   practice_location +
                   (1 | physician_id) + (1 | question),
@@ -799,9 +817,10 @@ ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
 # Check correlation between experience and confidence
 cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs")
 
-# Primary model: vignette type + confidence + experience + practice location (no interaction)
+# Primary model: vignette type + confidence (within/between) + experience + practice location
 model_primary <- glmer(chose_medevac ~ medevac_status_label + 
-                  confidence_centered +
+                  confidence_within +
+                  confidence_between +
                   years_experience_centered +
                   practice_location +
                   (1 | physician_id) + (1 | question),
@@ -827,7 +846,7 @@ or_lower <- exp(fixed_effects - 1.96 * se)
 or_upper <- exp(fixed_effects + 1.96 * se)
 ```
 
-**Note:** Experience and confidence are moderately correlated (r = `r sprintf("%.2f", cor_exp_conf)`), but both are included as mean-centered continuous predictors to capture their independent effects.
+**Note:** Confidence is decomposed into within-person (deviation from own average) and between-person (overall confidence level) effects using the within-between decomposition approach. This separates the effect of "being more confident than usual on this vignette" from "being a generally confident physician."
 
 ## Table 3: Model Results - All Fixed Effects
 
@@ -845,7 +864,8 @@ fixed_table <- data.frame(
     "  Always Medevac",
     "",
     "**Decision Characteristics**",
-    "  Confidence (per 1-point increase)",
+    "  Confidence (within-person, per 1-point increase)",
+    "  Confidence (between-person, per 1-point increase)",
     "  Years of Experience (per 1-year increase)",
     "",
     "**Practice Location**",
@@ -853,10 +873,10 @@ fixed_table <- data.frame(
     "  Regional Hub",
     "  Mixed"
   ),
-  OR = c(NA, 1.00, or[2:4], NA, NA, or[5:6], NA, NA, 1.00, or[7:8]),
-  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[5:6], NA, NA, NA, or_lower[7:8]),
-  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[5:6], NA, NA, NA, or_upper[7:8]),
-  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[5:6], NA, NA, NA, p_values[7:8])
+  OR = c(NA, 1.00, or[2:4], NA, NA, or[5:7], NA, NA, 1.00, or[8:9]),
+  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[5:7], NA, NA, NA, or_lower[8:9]),
+  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[5:7], NA, NA, NA, or_upper[8:9]),
+  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[5:7], NA, NA, NA, p_values[8:9])
 ) %>%
   mutate(
     OR_display = case_when(
