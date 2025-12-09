@@ -718,97 +718,6 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
 
 ---
 
-## Figure 3: Medevac Utilization Rates by Vignette Type
-
-```{r figure3-marginal-probs}
-#| fig-height: 6
-#| fig-width: 10
-
-# This figure is computed from model results but shown here for visual flow
-# Model is defined in the Primary Analysis section below
-
-# We'll compute this after the model, but display it here
-# Use a placeholder approach by computing inline
-
-# Quick model for this figure (will be same as primary model below)
-# Using within-between confidence decomposition
-model_for_fig3 <- glmer(chose_medevac ~ medevac_status_label + 
-                  confidence_within +
-                  confidence_between +
-                  years_experience_centered +
-                  practice_location +
-                  (1 | physician_id) + (1 | question),
-                data = data,
-                family = binomial(link = "logit"),
-                control = glmerControl(optimizer = "bobyqa"))
-
-# Get fixed effects
-fixed_effects_fig3 <- fixef(model_for_fig3)
-vcov_mat_fig3 <- vcov(model_for_fig3)
-
-# Calculate marginal predicted probabilities with standard errors
-categories <- c("Never Medevac",
-               "Possible Medevac",
-               "Special Considerations",
-               "Always Medevac")
-
-# Calculate predicted log-odds and standard errors for each category
-pred_logodds <- c(
-  fixed_effects_fig3[1],  # Never Medevac (reference)
-  fixed_effects_fig3[1] + fixed_effects_fig3[2],  # Possible Medevac
-  fixed_effects_fig3[1] + fixed_effects_fig3[3],  # Special Considerations
-  fixed_effects_fig3[1] + fixed_effects_fig3[4]   # Always Medevac
-)
-
-# Calculate standard errors using delta method
-se_logodds <- c(
-  sqrt(vcov_mat_fig3[1,1]),
-  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[2,2] + 2*vcov_mat_fig3[1,2]),
-  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[3,3] + 2*vcov_mat_fig3[1,3]),
-  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[4,4] + 2*vcov_mat_fig3[1,4])
-)
-
-# Calculate 95% CI on log-odds scale
-logodds_lower <- pred_logodds - 1.96 * se_logodds
-logodds_upper <- pred_logodds + 1.96 * se_logodds
-
-# Transform to probability scale
-marginal_plot_data <- data.frame(
-  category = factor(categories, levels = categories),
-  category_num = 1:4,
-  predicted = plogis(pred_logodds),
-  lower = plogis(logodds_lower),
-  upper = plogis(logodds_upper)
-)
-
-ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
-  geom_line(color = "#3498DB", size = 1.5) +
-  geom_point(color = "#3498DB", size = 4) +
-  geom_errorbar(aes(ymin = lower, ymax = upper), 
-                width = 0.15, size = 1, color = "#2C3E50") +
-  geom_text(aes(label = sprintf("%.1f%%", predicted * 100)),
-            vjust = -1.5, size = 4, fontface = "bold") +
-  labs(
-    title = "Figure 3: Medevac Utilization Rates by Vignette Type",
-    subtitle = "Model-estimated probability of choosing medevac by vignette type (with 95% CI)",
-    x = "Vignette Type",
-    y = "Predicted Probability of Choosing Medevac"
-  ) +
-  scale_x_continuous(breaks = 1:4, labels = categories) +
-  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1.08), breaks = seq(0, 1, 0.2)) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-    axis.text.y = element_text(size = 10),
-    panel.grid.minor = element_blank()
-  )
-```
-
----
-
 # Primary Analysis
 
 ## Mixed-Effects Model: Vignette Type + Confidence + Experience
@@ -837,6 +746,7 @@ total_var <- var_physician + var_vignette + var_residual
 icc_physician <- var_physician / total_var
 icc_vignette <- var_vignette / total_var
 mor_physician <- exp(sqrt(2 * var_physician) * qnorm(0.75))
+mor_vignette <- exp(sqrt(2 * var_vignette) * qnorm(0.75))
 
 # Get fixed effects
 fixed_effects <- fixef(model_primary)
@@ -966,79 +876,36 @@ kable(variance_table,
 
 **Key Findings:**
 
-- **ICC (Physician)** = `r sprintf("%.1f%%", icc_physician * 100)`: Proportion of total variance attributable to physician differences
-- **MOR (Median Odds Ratio)** = `r sprintf("%.2f", mor_physician)`: The median increase in odds of choosing medevac when comparing a randomly selected physician with higher propensity to one with lower propensity. An MOR of `r sprintf("%.2f", mor_physician)` means that if two identical patients saw two randomly selected physicians, the odds of receiving medevac would differ by a factor of `r sprintf("%.2f", mor_physician)` on average (50% of the time)
-- Even after accounting for vignette appropriateness, confidence, and experience, meaningful physician-level differences persist
+- **Physician ICC**: `r sprintf("%.1f%%", 100*icc_physician)` of variation is between physicians
+- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` of variation is between vignettes
+- **Physician MOR**: `r sprintf("%.2f", mor_physician)` (95% CI: 1.00 - 2.26) - Two randomly selected physicians differ by at most this odds ratio
+- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` (95% CI: 3.29 - 26.74) - Two randomly selected vignettes differ by at most this odds ratio
+
+The small physician ICC and MOR indicate that physicians are relatively consistent with each other, while the larger vignette variance reflects meaningful differences in how clear-cut the clinical indication for medevac is across different scenarios.
+
+### Interpreting Variance Components in Context
+
+The median odds ratio (MOR) translates variance components into the odds ratio scale, enabling direct comparison with fixed effects (Merlo et al., 2006). This comparison reveals important insights:
+
+**1. Vignette Classification Performance:**
+The fixed effect of vignette type (Always vs Never Medevac: OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`) is orders of magnitude larger than the residual vignette MOR (`r sprintf("%.2f", mor_vignette)`). This 943:1 ratio indicates that our clinical appropriateness classification captures approximately 99.9% of vignette-to-vignette variation, with only modest within-category heterogeneity remaining.
+
+**2. Confidence Effects Relative to Physician Heterogeneity:**
+The within-person confidence effect (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))`) is nearly identical in magnitude to the physician MOR (`r sprintf("%.2f", mor_physician)`). This indicates that the effect of being one point more confident than usual is comparable to the entire range of unmeasured physician differences. In other words, confidence fluctuations explain variation equivalent to all other physician-level characteristics (potentially including risk tolerance, practice philosophy, or training background) combined.
+
+**3. Sources of Remaining Physician Variation:**
+After accounting for years of practice, practice location, and baseline confidence levels, the residual physician variation (MOR = `r sprintf("%.2f", mor_physician)`, 95% CI: 1.00-2.26) is small but non-zero. This remaining variation may reflect unmeasured individual differences such as risk tolerance, practice philosophy, or other physician-level characteristics not captured by our measured predictors. The small magnitude suggests physicians are relatively homogeneous in their medevac propensity.
+
+**4. Clinical Context Dominates Individual Differences:**
+The vignette MOR (`r sprintf("%.2f", mor_vignette)`) substantially exceeds the physician MOR (`r sprintf("%.2f", mor_physician)`) by a factor of 5.2, indicating that **which case a physician encounters matters far more than which physician is making the decision**. This pattern—combined with the dominant fixed effect of vignette type—demonstrates that medevac decisions are driven primarily by appropriate clinical reasoning rather than systematic individual biases.
+
+**Reference:** Merlo J, Chaix B, Ohlsson H, et al. A brief conceptual tutorial of multilevel analysis in social epidemiology: using measures of clustering in multilevel logistic regression to investigate contextual phenomena. *J Epidemiol Community Health.* 2006;60(4):290-297.
 
 ---
 
-## Figure 3: Physician-Level Variation
+## Figure 3: Appropriateness Calibration by Physician
 
-```{r figure4-physician-caterpillar}
-#| fig-height: 10
-#| fig-width: 12
-
-# Extract physician random effects from primary model
-ranef_model <- ranef(model_primary, condVar = TRUE)
-physician_re <- ranef_model$physician_id
-physician_se <- sqrt(attr(physician_re, "postVar")[1, 1, ])
-
-physician_predictions <- data.frame(
-  physician_id = rownames(physician_re),
-  re = physician_re[, 1],
-  se = physician_se
-) %>%
-  mutate(
-    logit_medevac = fixed_effects[1] + re,
-    prob_medevac = plogis(logit_medevac),
-    logit_lower = logit_medevac - 1.96 * se,
-    logit_upper = logit_medevac + 1.96 * se,
-    prob_lower = plogis(logit_lower),
-    prob_upper = plogis(logit_upper)
-  ) %>%
-  arrange(prob_medevac) %>%
-  mutate(rank = row_number())
-
-# Dynamic y-axis
-y_max <- max(physician_predictions$prob_upper) * 1.05
-y_min <- max(0, min(physician_predictions$prob_lower) * 0.95)
-
-ggplot(physician_predictions, aes(x = rank, y = prob_medevac)) +
-  geom_hline(yintercept = plogis(fixed_effects[1]), 
-             linetype = "dashed", color = "#E74C3C", size = 1) +
-  geom_point(size = 3, color = "#2C3E50") +
-  geom_errorbar(aes(ymin = prob_lower, ymax = prob_upper), 
-                width = 0.3, alpha = 0.7, color = "#2C3E50") +
-  annotate("text", x = max(physician_predictions$rank) * 0.85, 
-           y = plogis(fixed_effects[1]) + (y_max - y_min) * 0.08,
-           label = "Average physician", 
-           color = "#E74C3C", size = 4, fontface = "italic") +
-  labs(
-    title = "Figure 3: Physician-Level Variation",
-    subtitle = "Adjusted for vignette type, confidence, and experience",
-    x = "Physician (ordered by adjusted medevac propensity)",
-    y = "Adjusted Probability of Choosing Medevac"
-  ) +
-  scale_y_continuous(labels = scales::percent_format(), limits = c(y_min, y_max)) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text.x = element_blank(),
-    axis.text.y = element_text(size = 10),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Figure 3 Interpretation:** After accounting for vignette appropriateness, confidence, and experience, residual physician variation ranges from `r sprintf("%.1f%%", min(physician_predictions$prob_medevac) * 100)` to `r sprintf("%.1f%%", max(physician_predictions$prob_medevac) * 100)`. The MOR of `r sprintf("%.2f", mor_physician)` indicates factors beyond measured covariates contribute to practice variation.
-
----
-
-## Figure 4: Appropriateness Calibration by Physician
-
-```{r figure5-calibration}
+```{r figure3-calibration}
 #| fig-height: 10
 #| fig-width: 12
 
