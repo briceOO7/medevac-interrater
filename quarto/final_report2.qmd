@@ -57,16 +57,16 @@ raw_data <- read.csv(here::here("data", "survey_results.csv"),
 data <- read.csv(here::here("data", "processed", "survey_data_processed.csv"),
                  stringsAsFactors = FALSE)
 
-# Load medevac normative mapping
-medevac_mapping <- read.csv(here::here("data", "medevac_normative_mapping.csv"),
+# Load medevac normative mapping (SIMPLIFIED - 3 categories)
+medevac_mapping <- read.csv(here::here("data", "medevac_normative_mapping_simplified.csv"),
                              stringsAsFactors = FALSE)
 
 # Load physician experience data
 physician_experience <- read.csv(here::here("data", "physician_experience.csv"),
                                  stringsAsFactors = FALSE)
 
-# Load rural experience data
-rural_experience <- read.csv(here::here("data", "rural_experience.csv"),
+# Load practice location data
+practice_location <- read.csv(here::here("data", "practice_location.csv"),
                              stringsAsFactors = FALSE)
 
 # Merge with main data
@@ -75,7 +75,7 @@ data <- data %>%
             by = "question") %>%
   left_join(physician_experience %>% select(physician_id, years_experience),
             by = "physician_id") %>%
-  left_join(rural_experience %>% select(physician_id, rural_experience),
+  left_join(practice_location %>% select(physician_id, practice_location),
             by = "physician_id")
 
 # Create binary outcomes and centered predictors
@@ -83,15 +83,14 @@ data <- data %>%
   mutate(
     # Primary outcome: chose medevac vs. not
     chose_medevac = ifelse(decision == "Medevac", 1, 0),
-    # Set factor levels with Never Medevac as reference
+    # Set factor levels with Never Medevac as reference (SIMPLIFIED - 3 categories)
     medevac_status_label = factor(medevac_status_label,
                                    levels = c("Never Medevac",
-                                            "Medevac One of Two Wrong",
-                                            "Ambiguous (All Plausible)",
-                                            "Medevac One of Two Correct",
+                                            "Possible Medevac",
                                             "Always Medevac")),
-    # Factor rural experience
-    rural_experience = factor(rural_experience, levels = c("No", "Yes")),
+    # Factor practice location with Referral Hub as reference
+    practice_location = factor(practice_location, 
+                              levels = c("Referral Hub", "Regional Hub", "Mixed")),
     # Center continuous predictors for interpretation
     confidence_centered = confidence - mean(confidence, na.rm = TRUE),
     years_experience_centered = years_experience - mean(years_experience, na.rm = TRUE)
@@ -104,11 +103,9 @@ This report examines physician variation in medevac decision-making through the 
 
 We categorize all 20 vignettes by **vignette type** (appropriateness of the medevac option):
 
-- **Always Medevac** (n=4): Medevac is the single best answer
-- **Medevac One of Two Correct** (n=5): Medevac is appropriate, along with one other option
-- **Ambiguous (All Plausible)** (n=3): All three options are reasonable
-- **Medevac One of Two Wrong** (n=4): Medevac is inappropriate; two other options are reasonable
-- **Never Medevac** (n=4): Medevac is the single worst answer
+- **Always Medevac** (n=4): Medevac is clearly the best answer
+- **Possible Medevac** (n=12): Medevac may or may not be appropriate depending on clinical judgment
+- **Never Medevac** (n=4): Medevac is clearly not appropriate
 
 **Statistical Model**: Binary mixed-effects logistic regression
 - Outcome: Chose medevac vs. not
@@ -142,9 +139,7 @@ normative_counts <- data %>%
   distinct(question, medevac_status_label) %>%
   count(medevac_status_label) %>%
   arrange(factor(medevac_status_label, 
-                 levels = c("Never Medevac", "Medevac One of Two Wrong",
-                            "Ambiguous (All Plausible)", "Medevac One of Two Correct",
-                            "Always Medevac")))
+                 levels = c("Never Medevac", "Possible Medevac", "Always Medevac")))
 
 # Calculate agreement statistics by vignette
 agreement_by_vignette <- data %>%
@@ -188,21 +183,23 @@ physician_summary <- data %>%
   group_by(physician_id) %>%
   summarise(
     years_experience = first(years_experience),
-    rural_experience = first(rural_experience),
+    practice_location = first(practice_location),
     n_responses = n(),
     n_medevac = sum(decision == "Medevac"),
     pct_medevac = 100 * mean(decision == "Medevac")
   )
 
-# Calculate rural experience counts
-rural_exp_summary <- physician_summary %>%
-  count(rural_experience)
+# Calculate practice location counts
+location_summary <- physician_summary %>%
+  count(practice_location)
 
-n_rural_yes <- rural_exp_summary %>% filter(rural_experience == "Yes") %>% pull(n)
-n_rural_no <- rural_exp_summary %>% filter(rural_experience == "No") %>% pull(n)
 n_physicians <- length(unique(data$physician_id))
-pct_rural_yes <- 100 * n_rural_yes / n_physicians
-pct_rural_no <- 100 * n_rural_no / n_physicians
+n_regional <- location_summary %>% filter(practice_location == "Regional Hub") %>% pull(n)
+n_referral <- location_summary %>% filter(practice_location == "Referral Hub") %>% pull(n)
+n_mixed <- location_summary %>% filter(practice_location == "Mixed") %>% pull(n)
+pct_regional <- 100 * n_regional / n_physicians
+pct_referral <- 100 * n_referral / n_physicians
+pct_mixed <- 100 * n_mixed / n_physicians
 
 # Calculate correct responses to Always/Never Medevac vignettes
 correct_responses <- data %>%
@@ -231,9 +228,10 @@ chars <- c(
   "  Median [IQR]",
   "  Range",
   "",
-  "**Rural Experience**",
-  "  Yes",
-  "  No",
+  "**Practice Location**",
+  "  Regional Hub",
+  "  Referral Hub (ANMC)",
+  "  Mixed",
   "",
   "**Vignettes**",
   "  Total Vignettes"
@@ -253,8 +251,9 @@ vals <- c(
           max(physician_summary$years_experience)),
   "",
   "",
-  sprintf("%d (%.0f%%)", n_rural_yes, pct_rural_yes),
-  sprintf("%d (%.0f%%)", n_rural_no, pct_rural_no),
+  sprintf("%d (%.0f%%)", n_regional, pct_regional),
+  sprintf("%d (%.0f%%)", n_referral, pct_referral),
+  sprintf("%d (%.0f%%)", n_mixed, pct_mixed),
   "",
   "",
   as.character(length(unique(data$question)))
@@ -576,9 +575,7 @@ vignette_desc <- vignette_desc %>%
 table2_display <- vignette_desc %>%
   # Arrange by medevac_status_label to ensure proper grouping
   arrange(factor(medevac_status_label, 
-                 levels = c("Never Medevac", "Medevac One of Two Wrong",
-                           "Ambiguous (All Plausible)", "Medevac One of Two Correct",
-                           "Always Medevac")),
+                 levels = c("Never Medevac", "Possible Medevac", "Always Medevac")),
           question) %>%
   select(
     `Vignette Type` = vignette_type,
@@ -649,42 +646,36 @@ table2_kable
 # Use a placeholder approach by computing inline
 
 # Quick model for this figure (will be same as primary model below)
-model_for_fig2 <- glmer(chose_medevac ~ medevac_status_label + 
+model_for_fig3 <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_centered +
                   years_experience_centered +
-                  rural_experience +
+                  practice_location +
                   (1 | physician_id) + (1 | question),
                 data = data,
                 family = binomial(link = "logit"),
                 control = glmerControl(optimizer = "bobyqa"))
 
 # Get fixed effects
-fixed_effects_fig2 <- fixef(model_for_fig2)
-vcov_mat_fig2 <- vcov(model_for_fig2)
+fixed_effects_fig3 <- fixef(model_for_fig3)
+vcov_mat_fig3 <- vcov(model_for_fig3)
 
 # Calculate marginal predicted probabilities with standard errors
 categories <- c("Never Medevac",
-               "Medevac One of Two Wrong",
-               "Ambiguous (All Plausible)",
-               "Medevac One of Two Correct",
+               "Possible Medevac",
                "Always Medevac")
 
 # Calculate predicted log-odds and standard errors for each category
 pred_logodds <- c(
-  fixed_effects_fig2[1],  # Reference
-  fixed_effects_fig2[1] + fixed_effects_fig2[2],
-  fixed_effects_fig2[1] + fixed_effects_fig2[3],
-  fixed_effects_fig2[1] + fixed_effects_fig2[4],
-  fixed_effects_fig2[1] + fixed_effects_fig2[5]
+  fixed_effects_fig3[1],  # Never Medevac (reference)
+  fixed_effects_fig3[1] + fixed_effects_fig3[2],  # Possible Medevac
+  fixed_effects_fig3[1] + fixed_effects_fig3[3]   # Always Medevac
 )
 
 # Calculate standard errors using delta method
 se_logodds <- c(
-  sqrt(vcov_mat_fig2[1,1]),
-  sqrt(vcov_mat_fig2[1,1] + vcov_mat_fig2[2,2] + 2*vcov_mat_fig2[1,2]),
-  sqrt(vcov_mat_fig2[1,1] + vcov_mat_fig2[3,3] + 2*vcov_mat_fig2[1,3]),
-  sqrt(vcov_mat_fig2[1,1] + vcov_mat_fig2[4,4] + 2*vcov_mat_fig2[1,4]),
-  sqrt(vcov_mat_fig2[1,1] + vcov_mat_fig2[5,5] + 2*vcov_mat_fig2[1,5])
+  sqrt(vcov_mat_fig3[1,1]),
+  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[2,2] + 2*vcov_mat_fig3[1,2]),
+  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[3,3] + 2*vcov_mat_fig3[1,3])
 )
 
 # Calculate 95% CI on log-odds scale
@@ -694,7 +685,7 @@ logodds_upper <- pred_logodds + 1.96 * se_logodds
 # Transform to probability scale
 marginal_plot_data <- data.frame(
   category = factor(categories, levels = categories),
-  category_num = 1:5,
+  category_num = 1:3,
   predicted = plogis(pred_logodds),
   lower = plogis(logodds_lower),
   upper = plogis(logodds_upper)
@@ -713,7 +704,7 @@ ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
     x = "Vignette Type",
     y = "Predicted Probability of Choosing Medevac"
   ) +
-  scale_x_continuous(breaks = 1:5, labels = categories) +
+  scale_x_continuous(breaks = 1:3, labels = categories) +
   scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1.08), breaks = seq(0, 1, 0.2)) +
   theme_minimal() +
   theme(
@@ -736,11 +727,11 @@ ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
 # Check correlation between experience and confidence
 cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs")
 
-# Primary model: vignette type + confidence + experience + rural experience (no interaction)
+# Primary model: vignette type + confidence + experience + practice location (no interaction)
 model_primary <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_centered +
                   years_experience_centered +
-                  rural_experience +
+                  practice_location +
                   (1 | physician_id) + (1 | question),
                 data = data,
                 family = binomial(link = "logit"),
@@ -777,40 +768,39 @@ fixed_table <- data.frame(
   Predictor = c(
     "**Vignette Type**",
     "  Never Medevac (reference)",
-    "  Medevac One of Two Wrong",
-    "  Ambiguous (All Plausible)",
-    "  Medevac One of Two Correct",
+    "  Possible Medevac",
     "  Always Medevac",
     "",
     "**Decision Characteristics**",
     "  Confidence (per 1-point increase)",
     "  Years of Experience (per 1-year increase)",
     "",
-    "**Practice Setting**",
-    "  Rural Experience: No (reference)",
-    "  Rural Experience: Yes"
+    "**Practice Location**",
+    "  Referral Hub (reference)",
+    "  Regional Hub",
+    "  Mixed"
   ),
-  OR = c(NA, 1.00, or[2:5], NA, NA, or[6:7], NA, NA, 1.00, or[8]),
-  CI_lower = c(NA, NA, or_lower[2:5], NA, NA, or_lower[6:7], NA, NA, NA, or_lower[8]),
-  CI_upper = c(NA, NA, or_upper[2:5], NA, NA, or_upper[6:7], NA, NA, NA, or_upper[8]),
-  p_value_raw = c(NA, NA, p_values[2:5], NA, NA, p_values[6:7], NA, NA, NA, p_values[8])
+  OR = c(NA, 1.00, or[2:3], NA, NA, or[4:5], NA, NA, 1.00, or[6:7]),
+  CI_lower = c(NA, NA, or_lower[2:3], NA, NA, or_lower[4:5], NA, NA, NA, or_lower[6:7]),
+  CI_upper = c(NA, NA, or_upper[2:3], NA, NA, or_upper[4:5], NA, NA, NA, or_upper[6:7]),
+  p_value_raw = c(NA, NA, p_values[2:3], NA, NA, p_values[4:5], NA, NA, NA, p_values[6:7])
 ) %>%
   mutate(
     OR_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Setting**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)", "  Rural Experience: No (reference)") ~ "1.00",
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Location**") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "  Referral Hub (reference)") ~ "1.00",
       !is.na(OR) ~ sprintf("%.2f", OR),
       TRUE ~ ""
     ),
     CI_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Setting**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)", "  Rural Experience: No (reference)") ~ "ref",
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Location**") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "  Referral Hub (reference)") ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
     ),
     p_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Setting**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)", "  Rural Experience: No (reference)") ~ "ref",
+      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Location**") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "  Referral Hub (reference)") ~ "ref",
       is.na(p_value_raw) ~ "",
       p_value_raw < 0.001 ~ "<0.001*",
       p_value_raw < 0.05 ~ sprintf("%.3f*", p_value_raw),
