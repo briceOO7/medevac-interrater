@@ -864,37 +864,38 @@ fixed_table <- data.frame(
     "  Special Considerations",
     "  Always Medevac",
     "",
-    "**Decision Characteristics**",
-    "  Confidence (compared to average response for each physician)",
-    "  Confidence (compared to average physician)",
+    "**Physician Characteristics**",
     "  Years of Experience (per 1-year increase)",
+    "  Confidence (compared to average physician)",
+    "  Practice Location:",
+    "    Referral Hub (reference)",
+    "    Regional Hub",
+    "    Mixed",
     "",
-    "**Practice Location**",
-    "  Referral Hub (reference)",
-    "  Regional Hub",
-    "  Mixed"
+    "**Decision Characteristics**",
+    "  Confidence (compared to average response for each physician)"
   ),
-  OR = c(NA, 1.00, or[2:4], NA, NA, or[5:7], NA, NA, 1.00, or[8:9]),
-  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[5:7], NA, NA, NA, or_lower[8:9]),
-  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[5:7], NA, NA, NA, or_upper[8:9]),
-  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[5:7], NA, NA, NA, p_values[8:9])
+  OR = c(NA, 1.00, or[2:4], NA, NA, or[6], or[7], NA, 1.00, or[8], or[9], NA, NA, or[5]),
+  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[6], or_lower[7], NA, NA, or_lower[8], or_lower[9], NA, NA, or_lower[5]),
+  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[6], or_upper[7], NA, NA, or_upper[8], or_upper[9], NA, NA, or_upper[5]),
+  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[6], p_values[7], NA, NA, p_values[8], p_values[9], NA, NA, p_values[5])
 ) %>%
   mutate(
     OR_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Location**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)", "  Referral Hub (reference)") ~ "1.00",
+      Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "    Referral Hub (reference)") ~ "1.00",
       !is.na(OR) ~ sprintf("%.2f", OR),
       TRUE ~ ""
     ),
     CI_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Location**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)", "  Referral Hub (reference)") ~ "ref",
+      Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
     ),
     p_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Decision Characteristics**", "**Practice Location**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)", "  Referral Hub (reference)") ~ "ref",
+      Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
+      Predictor %in% c("  Never Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
       is.na(p_value_raw) ~ "",
       p_value_raw < 0.001 ~ "<0.001*",
       p_value_raw < 0.05 ~ sprintf("%.3f*", p_value_raw),
