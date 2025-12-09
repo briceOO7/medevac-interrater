@@ -638,7 +638,7 @@ table2_kable
 
 # Figure 2: Appropriateness Gradient
 
-```{r figure2-marginal-probs}
+```{r figure3-marginal-probs}
 #| fig-height: 6
 #| fig-width: 10
 
@@ -891,7 +891,7 @@ kable(variance_table,
 
 ## Figure 3: Physician-Level Variation
 
-```{r figure3-physician-caterpillar}
+```{r figure4-physician-caterpillar}
 #| fig-height: 10
 #| fig-width: 12
 
@@ -955,7 +955,7 @@ ggplot(physician_predictions, aes(x = rank, y = prob_medevac)) +
 
 ## Figure 4: Appropriateness Calibration by Physician
 
-```{r figure4-calibration}
+```{r figure5-calibration}
 #| fig-height: 10
 #| fig-width: 12
 
@@ -994,7 +994,7 @@ ggplot(physician_calibration, aes(x = prob_never, y = prob_always, color = years
            label = "Good discrimination\n(above diagonal)", 
            size = 4, fontface = "bold", color = "#27AE60") +
   labs(
-    title = "Figure 4: Physician Appropriateness Calibration",
+    title = "Figure 5: Physician Appropriateness Calibration",
     subtitle = "Medevac propensity when 'Never Medevac' vs. 'Always Medevac' (colored by experience)",
     x = "Predicted Prob. When Never Medevac",
     y = "Predicted Prob. When Always Medevac"
