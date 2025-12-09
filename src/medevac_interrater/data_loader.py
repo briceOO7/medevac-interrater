@@ -31,29 +31,29 @@ def get_vignette_classification() -> Dict[int, Dict[str, str]]:
     Get vignette classification mapping from analysis plan.
     
     Returns:
-        Dictionary mapping question number to classification
+        Dictionary mapping question number to classification including vignette_label
     """
     return {
-        1: {"question_type": "Clear Medevac", "vignette_class": "A"},
-        2: {"question_type": "Clear Not Medevac", "vignette_class": "A"},
-        3: {"question_type": "Any Option", "vignette_class": "C"},
-        4: {"question_type": "Clear Medevac", "vignette_class": "A"},
-        5: {"question_type": "Clear Not Medevac", "vignette_class": "B"},
-        6: {"question_type": "Clear Not Medevac", "vignette_class": "B"},
-        7: {"question_type": "Clear Not Remain", "vignette_class": "B"},
-        8: {"question_type": "Clear Remain", "vignette_class": "A"},
-        9: {"question_type": "Clear Commercial", "vignette_class": "A"},
-        10: {"question_type": "Clear Not Remain", "vignette_class": "B"},
-        11: {"question_type": "Clear Remain", "vignette_class": "A"},
-        12: {"question_type": "Any Option", "vignette_class": "C"},
-        13: {"question_type": "Clear Medevac", "vignette_class": "A"},
-        14: {"question_type": "Clear Not Medevac", "vignette_class": "B"},
-        15: {"question_type": "Clear Commercial", "vignette_class": "A"},
-        16: {"question_type": "Conflict Between Physiology/Logistics", "vignette_class": "D"},
-        17: {"question_type": "Conflict Between Physiology/Logistics", "vignette_class": "D"},
-        18: {"question_type": "Conflict Between Physiology/Logistics", "vignette_class": "D"},
-        19: {"question_type": "Clear Medevac", "vignette_class": "A"},
-        20: {"question_type": "Any Option", "vignette_class": "C"},
+        1: {"question_type": "Clear Medevac", "vignette_class": "A", "vignette_label": "A1"},
+        2: {"question_type": "Clear Not Medevac", "vignette_class": "B", "vignette_label": "B1"},
+        3: {"question_type": "Any Option", "vignette_class": "C", "vignette_label": "C1"},
+        4: {"question_type": "Clear Medevac", "vignette_class": "A", "vignette_label": "A2"},
+        5: {"question_type": "Clear Not Medevac", "vignette_class": "B", "vignette_label": "B2"},
+        6: {"question_type": "Clear Not Medevac", "vignette_class": "B", "vignette_label": "B3"},
+        7: {"question_type": "Clear Not Remain", "vignette_class": "B", "vignette_label": "B4"},
+        8: {"question_type": "Clear Remain", "vignette_class": "A", "vignette_label": "A3"},
+        9: {"question_type": "Clear Commercial", "vignette_class": "A", "vignette_label": "A4"},
+        10: {"question_type": "Clear Not Remain", "vignette_class": "B", "vignette_label": "B5"},
+        11: {"question_type": "Clear Remain", "vignette_class": "A", "vignette_label": "A5"},
+        12: {"question_type": "Any Option", "vignette_class": "C", "vignette_label": "C2"},
+        13: {"question_type": "Clear Medevac", "vignette_class": "A", "vignette_label": "A6"},
+        14: {"question_type": "Clear Not Medevac", "vignette_class": "B", "vignette_label": "B6"},
+        15: {"question_type": "Clear Commercial", "vignette_class": "A", "vignette_label": "A7"},
+        16: {"question_type": "Conflict Between Physiology/Logistics", "vignette_class": "D", "vignette_label": "D1"},
+        17: {"question_type": "Conflict Between Physiology/Logistics", "vignette_class": "D", "vignette_label": "D2"},
+        18: {"question_type": "Conflict Between Physiology/Logistics", "vignette_class": "D", "vignette_label": "D3"},
+        19: {"question_type": "Clear Medevac", "vignette_class": "A", "vignette_label": "A8"},
+        20: {"question_type": "Any Option", "vignette_class": "C", "vignette_label": "C3"},
     }
 
 
@@ -218,6 +218,7 @@ def reshape_to_long_format(df: pd.DataFrame) -> pd.DataFrame:
             record = {
                 "physician_id": physician_id,
                 "question": q_num,
+                "vignette_label": vignette.get("vignette_label", f"Q{q_num}"),
                 "decision": decision_clean,
                 "confidence": confidence,
                 "question_type": vignette.get("question_type", "Unknown"),

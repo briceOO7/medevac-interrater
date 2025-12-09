@@ -603,8 +603,6 @@ table2_display <- vignette_desc %>%
     `Remain` = remain_display,
     `Modal` = modal_decision,
     `Agreement %` = agreement_pct,
-    `Gwet's AC1` = gwet_ac1,
-    Interpretation = ac1_interpretation,
     `Median Conf. [IQR]` = conf_display,
     # Keep medevac_status_label for grouping
     medevac_status = medevac_status_label
@@ -623,7 +621,7 @@ row_groups <- table2_display %>%
 # Create base table
 table2_kable <- kable(table2_display %>% select(-medevac_status),
       caption = "Table 2: Descriptive Statistics by Vignette",
-      align = c("l", "r", "l", "l", "l", "l", "r", "r", "l", "l")) %>%
+      align = c("l", "r", "l", "l", "l", "l", "r", "l")) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"),
     full_width = FALSE,
@@ -645,171 +643,14 @@ table2_kable
 ```
 
 **Table 2 Notes:**
-- **Gwet's AC1**: Chance-corrected agreement statistic chosen over Cohen's Kappa due to superior performance with class imbalance. AC1 is less affected by prevalence and marginal probability asymmetry, making it more appropriate when decision options have unequal base rates across vignettes
 - **Median Conf. [IQR]**: Median confidence rating with interquartile range (1-10 scale)
 - Vignettes grouped by vignette type (matching Table 1 classification)
 
 ---
 
-## Figure 2: Confidence and Agreement by Vignette
+## Figure 2: Agreement, Confidence, and Medevac Selection by Vignette Type
 
-```{r figure2-confidence-agreement}
-# Calculate vignette-level confidence and agreement
-vignette_conf_agree <- data %>%
-  left_join(agreement_by_vignette %>% select(question, agreement_pct, modal_decision),
-            by = "question") %>%
-  group_by(question, medevac_status_label, agreement_pct) %>%
-  summarise(
-    mean_confidence = mean(confidence, na.rm = TRUE),
-    median_confidence = median(confidence, na.rm = TRUE),
-    sd_confidence = sd(confidence, na.rm = TRUE),
-    n_responses = n(),
-    .groups = "drop"
-  )
-
-# Calculate correlation
-cor_pearson <- cor.test(vignette_conf_agree$agreement_pct, 
-                        vignette_conf_agree$mean_confidence, 
-                        method = "pearson")
-cor_spearman <- cor.test(vignette_conf_agree$agreement_pct, 
-                         vignette_conf_agree$mean_confidence, 
-                         method = "spearman")
-
-# Create scatter plot
-ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence, 
-                                 color = medevac_status_label)) +
-  geom_point(size = 4, alpha = 0.7) +
-  geom_smooth(method = "lm", se = TRUE, color = "gray30", linetype = "dashed", linewidth = 0.8) +
-  geom_text(aes(label = paste0("Q", question)), 
-            hjust = -0.2, vjust = -0.5, size = 3, show.legend = FALSE) +
-  scale_color_manual(
-    values = c("Never Medevac" = "#E74C3C",
-               "Possible Medevac" = "#95A5A6",
-               "Special Considerations" = "#F39C12",
-               "Always Medevac" = "#27AE60"),
-    name = "Vignette Type"
-  ) +
-  labs(
-    title = "Figure 2: Confidence and Agreement by Vignette",
-    subtitle = sprintf("Pearson r = %.2f (p = %.3f) | Spearman rho = %.2f (p = %.3f)",
-                      cor_pearson$estimate, cor_pearson$p.value,
-                      cor_spearman$estimate, cor_spearman$p.value),
-    x = "Inter-Rater Agreement (%)",
-    y = "Mean Confidence (1-10 scale)",
-    caption = "Each point represents one vignette. Dashed line shows linear regression."
-  ) +
-  scale_x_continuous(limits = c(40, 105), breaks = seq(40, 100, 10)) +
-  scale_y_continuous(limits = c(5, 10), breaks = seq(5, 10, 1)) +
-  theme_minimal(base_size = 14) +
-  theme(
-    plot.title = element_text(face = "bold", size = 16),
-    plot.subtitle = element_text(size = 11, color = "gray30"),
-    plot.caption = element_text(hjust = 0.5, size = 10, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Key Findings:**
-
-- **Correlation**: `r ifelse(cor_pearson$p.value < 0.05, sprintf("Significant positive correlation (r = %.2f, p = %.3f)", cor_pearson$estimate, cor_pearson$p.value), sprintf("No significant correlation (r = %.2f, p = %.2f)", cor_pearson$estimate, cor_pearson$p.value))`
-- **Interpretation**: `r ifelse(cor_pearson$estimate > 0.3 & cor_pearson$p.value < 0.05, "Physicians are more confident on vignettes with higher agreement, suggesting appropriate calibration.", ifelse(abs(cor_pearson$estimate) < 0.3, "Confidence levels are relatively independent of agreement, suggesting physicians maintain consistent confidence across vignettes.", "Unexpected pattern warrants further investigation."))`
-
----
-
-## Figure 3: Medevac Utilization Rates by Vignette Type
-
-```{r figure3-marginal-probs}
-#| fig-height: 6
-#| fig-width: 10
-
-# This figure is computed from model results but shown here for visual flow
-# Model is defined in the Primary Analysis section below
-
-# We'll compute this after the model, but display it here
-# Use a placeholder approach by computing inline
-
-# Quick model for this figure (will be same as primary model below)
-# Using within-between confidence decomposition
-model_for_fig3 <- glmer(chose_medevac ~ medevac_status_label + 
-                  confidence_within +
-                  confidence_between +
-                  years_experience_centered +
-                  practice_location +
-                  (1 | physician_id) + (1 | question),
-                data = data,
-                family = binomial(link = "logit"),
-                control = glmerControl(optimizer = "bobyqa"))
-
-# Get fixed effects
-fixed_effects_fig3 <- fixef(model_for_fig3)
-vcov_mat_fig3 <- vcov(model_for_fig3)
-
-# Calculate marginal predicted probabilities with standard errors
-categories <- c("Never Medevac",
-               "Possible Medevac",
-               "Special Considerations",
-               "Always Medevac")
-
-# Calculate predicted log-odds and standard errors for each category
-pred_logodds <- c(
-  fixed_effects_fig3[1],  # Never Medevac (reference)
-  fixed_effects_fig3[1] + fixed_effects_fig3[2],  # Possible Medevac
-  fixed_effects_fig3[1] + fixed_effects_fig3[3],  # Special Considerations
-  fixed_effects_fig3[1] + fixed_effects_fig3[4]   # Always Medevac
-)
-
-# Calculate standard errors using delta method
-se_logodds <- c(
-  sqrt(vcov_mat_fig3[1,1]),
-  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[2,2] + 2*vcov_mat_fig3[1,2]),
-  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[3,3] + 2*vcov_mat_fig3[1,3]),
-  sqrt(vcov_mat_fig3[1,1] + vcov_mat_fig3[4,4] + 2*vcov_mat_fig3[1,4])
-)
-
-# Calculate 95% CI on log-odds scale
-logodds_lower <- pred_logodds - 1.96 * se_logodds
-logodds_upper <- pred_logodds + 1.96 * se_logodds
-
-# Transform to probability scale
-marginal_plot_data <- data.frame(
-  category = factor(categories, levels = categories),
-  category_num = 1:4,
-  predicted = plogis(pred_logodds),
-  lower = plogis(logodds_lower),
-  upper = plogis(logodds_upper)
-)
-
-ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
-  geom_line(color = "#3498DB", size = 1.5) +
-  geom_point(color = "#3498DB", size = 4) +
-  geom_errorbar(aes(ymin = lower, ymax = upper), 
-                width = 0.15, size = 1, color = "#2C3E50") +
-  geom_text(aes(label = sprintf("%.1f%%", predicted * 100)),
-            vjust = -1.5, size = 4, fontface = "bold") +
-  labs(
-    title = "Figure 3: Medevac Utilization Rates by Vignette Type",
-    subtitle = "Model-estimated probability of choosing medevac by vignette type (with 95% CI)",
-    x = "Vignette Type",
-    y = "Predicted Probability of Choosing Medevac"
-  ) +
-  scale_x_continuous(breaks = 1:4, labels = categories) +
-  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1.08), breaks = seq(0, 1, 0.2)) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-    axis.text.y = element_text(size = 10),
-    panel.grid.minor = element_blank()
-  )
-```
-
-### Summary Statistics by Vignette Type
-
-```{r figure3-combined-lines}
+```{r figure2-combined-lines}
 #| fig-height: 7
 #| fig-width: 12
 
@@ -875,7 +716,7 @@ ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metri
     name = NULL
   ) +
   labs(
-    title = "Agreement, Confidence, and Medevac Selection by Vignette Type",
+    title = "Figure 2: Agreement, Confidence, and Medevac Selection by Vignette Type",
     subtitle = "Note: Confidence rescaled to 0-100 scale for comparison (original 1-10 scale × 10)",
     x = "Vignette Type",
     y = "Percentage / Scaled Score"
@@ -902,6 +743,164 @@ ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metri
 - **Confidence** (orange, scaled): Highest when medevac is clearly indicated (Always Medevac)
 - **Medevac Selection** (green): Strong gradient from Never (0%) to Always (100%)
 - Error bars show 95% confidence intervals
+
+---
+
+## Figure 3: Confidence and Agreement by Vignette
+
+```{r figure3-confidence-agreement}
+# Calculate vignette-level confidence and agreement
+vignette_conf_agree <- data %>%
+  left_join(agreement_by_vignette %>% select(question, agreement_pct, modal_decision),
+            by = "question") %>%
+  group_by(question, medevac_status_label, agreement_pct) %>%
+  summarise(
+    mean_confidence = mean(confidence, na.rm = TRUE),
+    median_confidence = median(confidence, na.rm = TRUE),
+    sd_confidence = sd(confidence, na.rm = TRUE),
+    n_responses = n(),
+    .groups = "drop"
+  )
+
+# Calculate correlation
+cor_pearson <- cor.test(vignette_conf_agree$agreement_pct, 
+                        vignette_conf_agree$mean_confidence, 
+                        method = "pearson")
+cor_spearman <- cor.test(vignette_conf_agree$agreement_pct, 
+                         vignette_conf_agree$mean_confidence, 
+                         method = "spearman")
+
+# Create scatter plot
+ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence, 
+                                 color = medevac_status_label)) +
+  geom_point(size = 4, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "gray30", linetype = "dashed", linewidth = 0.8) +
+  geom_text(aes(label = paste0("Q", question)), 
+            hjust = -0.2, vjust = -0.5, size = 3, show.legend = FALSE) +
+  scale_color_manual(
+    values = c("Never Medevac" = "#E74C3C",
+               "Possible Medevac" = "#95A5A6",
+               "Special Considerations" = "#F39C12",
+               "Always Medevac" = "#27AE60"),
+    name = "Vignette Type"
+  ) +
+  labs(
+    title = "Figure 3: Confidence and Agreement by Vignette",
+    subtitle = sprintf("Pearson r = %.2f (p = %.3f) | Spearman rho = %.2f (p = %.3f)",
+                      cor_pearson$estimate, cor_pearson$p.value,
+                      cor_spearman$estimate, cor_spearman$p.value),
+    x = "Inter-Rater Agreement (%)",
+    y = "Mean Confidence (1-10 scale)",
+    caption = "Each point represents one vignette. Dashed line shows linear regression."
+  ) +
+  scale_x_continuous(limits = c(40, 105), breaks = seq(40, 100, 10)) +
+  scale_y_continuous(limits = c(5, 10), breaks = seq(5, 10, 1)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 11, color = "gray30"),
+    plot.caption = element_text(hjust = 0.5, size = 10, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+**Key Findings:**
+
+- **Correlation**: `r ifelse(cor_pearson$p.value < 0.05, sprintf("Significant positive correlation (r = %.2f, p = %.3f)", cor_pearson$estimate, cor_pearson$p.value), sprintf("No significant correlation (r = %.2f, p = %.2f)", cor_pearson$estimate, cor_pearson$p.value))`
+- **Interpretation**: `r ifelse(cor_pearson$estimate > 0.3 & cor_pearson$p.value < 0.05, "Physicians are more confident on vignettes with higher agreement, suggesting appropriate calibration.", ifelse(abs(cor_pearson$estimate) < 0.3, "Confidence levels are relatively independent of agreement, suggesting physicians maintain consistent confidence across vignettes.", "Unexpected pattern warrants further investigation."))`
+
+---
+
+## Figure 4: Medevac Utilization Rates by Vignette Type
+
+```{r figure4-marginal-probs}
+#| fig-height: 6
+#| fig-width: 10
+
+# This figure is computed from model results but shown here for visual flow
+# Model is defined in the Primary Analysis section below
+
+# We'll compute this after the model, but display it here
+# Use a placeholder approach by computing inline
+
+# Quick model for this figure (will be same as primary model below)
+# Using within-between confidence decomposition
+model_for_fig4 <- glmer(chose_medevac ~ medevac_status_label + 
+                  confidence_within +
+                  confidence_between +
+                  years_experience_centered +
+                  practice_location +
+                  (1 | physician_id) + (1 | question),
+                data = data,
+                family = binomial(link = "logit"),
+                control = glmerControl(optimizer = "bobyqa"))
+
+# Get fixed effects
+fixed_effects_fig4 <- fixef(model_for_fig4)
+vcov_mat_fig4 <- vcov(model_for_fig4)
+
+# Calculate marginal predicted probabilities with standard errors
+categories <- c("Never Medevac",
+               "Possible Medevac",
+               "Special Considerations",
+               "Always Medevac")
+
+# Calculate predicted log-odds and standard errors for each category
+pred_logodds <- c(
+  fixed_effects_fig4[1],  # Never Medevac (reference)
+  fixed_effects_fig4[1] + fixed_effects_fig4[2],  # Possible Medevac
+  fixed_effects_fig4[1] + fixed_effects_fig4[3],  # Special Considerations
+  fixed_effects_fig4[1] + fixed_effects_fig4[4]   # Always Medevac
+)
+
+# Calculate standard errors using delta method
+se_logodds <- c(
+  sqrt(vcov_mat_fig4[1,1]),
+  sqrt(vcov_mat_fig4[1,1] + vcov_mat_fig4[2,2] + 2*vcov_mat_fig4[1,2]),
+  sqrt(vcov_mat_fig4[1,1] + vcov_mat_fig4[3,3] + 2*vcov_mat_fig4[1,3]),
+  sqrt(vcov_mat_fig4[1,1] + vcov_mat_fig4[4,4] + 2*vcov_mat_fig4[1,4])
+)
+
+# Calculate 95% CI on log-odds scale
+logodds_lower <- pred_logodds - 1.96 * se_logodds
+logodds_upper <- pred_logodds + 1.96 * se_logodds
+
+# Transform to probability scale
+marginal_plot_data <- data.frame(
+  category = factor(categories, levels = categories),
+  category_num = 1:4,
+  predicted = plogis(pred_logodds),
+  lower = plogis(logodds_lower),
+  upper = plogis(logodds_upper)
+)
+
+ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
+  geom_line(color = "#3498DB", size = 1.5) +
+  geom_point(color = "#3498DB", size = 4) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width = 0.15, size = 1, color = "#2C3E50") +
+  geom_text(aes(label = sprintf("%.1f%%", predicted * 100)),
+            vjust = -1.5, size = 4, fontface = "bold") +
+  labs(
+    title = "Figure 4: Medevac Utilization Rates by Vignette Type",
+    subtitle = "Model-estimated probability of choosing medevac by vignette type (with 95% CI)",
+    x = "Vignette Type",
+    y = "Predicted Probability of Choosing Medevac"
+  ) +
+  scale_x_continuous(breaks = 1:4, labels = categories) +
+  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1.08), breaks = seq(0, 1, 0.2)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  )
+```
 
 ---
 
@@ -1091,9 +1090,9 @@ The vignette MOR (`r sprintf("%.2f", mor_vignette)`) substantially exceeds the p
 
 ---
 
-## Figure 4: Appropriateness Calibration by Physician
+## Figure 5: Appropriateness Calibration by Physician
 
-```{r figure4-calibration}
+```{r figure5-calibration}
 #| fig-height: 10
 #| fig-width: 12
 

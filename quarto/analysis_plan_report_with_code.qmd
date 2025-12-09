@@ -1,0 +1,617 @@
+---
+title: "Medevac Interrater Reliability Analysis (With R Code)"
+subtitle: "Analysis Plan Implementation"
+author: "Medevac Interrater Study Team"
+date: today
+format:
+  docx:
+    toc: true
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 6
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(here)
+library(patchwork)
+library(irr)
+library(lme4)
+library(tibble)
+library(scales)
+
+# Load processed data
+data <- read.csv(here::here("data", "processed", "survey_data_processed.csv"),
+                 stringsAsFactors = FALSE)
+```
+
+# Introduction
+
+This report presents the analysis of physician medevac decision-making across 20 standardized clinical vignettes following the statistical analysis plan. Each of 20 physicians evaluated all vignettes and selected one of three management options:
+
+- **Medevac**: Immediate medical evacuation
+- **Commercial**: Next available commercial flight
+- **Remain**: Remain in village for observation/treatment
+
+Each physician also provided a confidence rating (1-10 scale) for their decision. Because each physician responds to multiple vignettes, the dataset involves **repeated measures (responses clustered within physician)**.
+
+## Vignette Classes
+
+- **Class A** (n=8): Clear affirmative cases - expert consensus suggests one option
+- **Class B** (n=6): Clear "NOT" cases - one option discouraged, two acceptable
+- **Class C** (n=3): Ambiguous cases - all options clinically reasonable
+- **Class D** (n=3): Situational/conflict cases - logistical constraints in emergencies
+
+---
+
+# Table 1: Overall Scoring Across 20 Vignettes
+
+This table describes the distribution of decisions for each vignette, showing the level of agreement among the 20 physicians.
+
+```{r table1-overall-scoring}
+# Calculate summary statistics for each vignette
+vignette_summary <- data %>%
+  group_by(question, vignette_label, question_type, vignette_class) %>%
+  summarize(
+    n_physicians = n(),
+    n_medevac = sum(decision == "Medevac"),
+    n_commercial = sum(decision == "Commercial"),
+    n_remain = sum(decision == "Remain"),
+    pct_medevac = round(100 * n_medevac / n_physicians, 1),
+    pct_commercial = round(100 * n_commercial / n_physicians, 1),
+    pct_remain = round(100 * n_remain / n_physicians, 1),
+    modal_decision = names(which.max(table(decision))),
+    modal_count = max(table(decision)),
+    agreement_pct = round(100 * modal_count / n_physicians, 1),
+    mean_confidence = round(mean(confidence, na.rm = TRUE), 1),
+    sd_confidence = round(sd(confidence, na.rm = TRUE), 1),
+    # Calculate Shannon entropy
+    entropy = {
+      probs <- c(n_medevac, n_commercial, n_remain) / n_physicians
+      probs <- probs[probs > 0]  # Remove zeros
+      -sum(probs * log(probs))
+    },
+    .groups = "drop"
+  ) %>%
+  arrange(vignette_class, question)
+
+# Create clean display table
+vignette_display <- vignette_summary %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    Class = vignette_class,
+    `Question Type` = question_type,
+    `Medevac (%)` = pct_medevac,
+    `Commercial (%)` = pct_commercial,
+    `Remain (%)` = pct_remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+# Display table (simplified for DOCX)
+print(vignette_display)
+```
+
+## Summary Statistics
+
+### Overall Summary
+
+```{r summary-stats-overall}
+summary_stats <- data.frame(
+  Metric = c(
+    "Total Vignettes",
+    "Total Physicians",
+    "Total Responses",
+    "Mean Agreement %",
+    "Median Agreement %",
+    "Agreement Range",
+    "Mean Confidence",
+    "Mean Entropy",
+    "Vignettes with ≥75% Agreement",
+    "Vignettes with <50% Agreement"
+  ),
+  Value = c(
+    length(unique(data$question)),
+    length(unique(data$physician_id)),
+    nrow(data),
+    paste0(round(mean(vignette_summary$agreement_pct), 1), "%"),
+    paste0(round(median(vignette_summary$agreement_pct), 1), "%"),
+    paste0(min(vignette_summary$agreement_pct), "% - ",
+           max(vignette_summary$agreement_pct), "%"),
+    round(mean(data$confidence, na.rm = TRUE), 1),
+    round(mean(vignette_summary$entropy), 3),
+    sum(vignette_summary$agreement_pct >= 75),
+    sum(vignette_summary$agreement_pct < 50)
+  )
+)
+
+print(summary_stats)
+```
+
+### Summary by Vignette Class (A → D)
+
+```{r summary-by-class}
+# Calculate summary statistics by vignette class
+class_summary <- vignette_summary %>%
+  group_by(vignette_class) %>%
+  summarize(
+    n_vignettes = n(),
+    mean_agreement_pct = round(mean(agreement_pct), 1),
+    median_agreement_pct = round(median(agreement_pct), 1),
+    sd_agreement_pct = round(sd(agreement_pct), 1),
+    mean_entropy = round(mean(entropy), 3),
+    sd_entropy = round(sd(entropy), 3),
+    mean_confidence = round(mean(mean_confidence), 1),
+    sd_confidence = round(sd(mean_confidence), 1),
+    .groups = "drop"
+  ) %>%
+  arrange(vignette_class)
+
+# Create display table
+class_summary_display <- class_summary %>%
+  select(
+    Class = vignette_class,
+    `N Vignettes` = n_vignettes,
+    `Mean Agreement %` = mean_agreement_pct,
+    `SD Agreement` = sd_agreement_pct,
+    `Mean Entropy` = mean_entropy,
+    `SD Entropy` = sd_entropy,
+    `Mean Confidence` = mean_confidence,
+    `SD Confidence` = sd_confidence
+  )
+
+print(class_summary_display)
+```
+
+---
+
+# Table 2: Interrater Reliability Metrics (Fleiss' Kappa)
+
+Fleiss' Kappa measures agreement among multiple raters while accounting for chance agreement.
+
+**Interpretation:**
+- **< 0**: Less than chance
+- **0.01-0.20**: Slight
+- **0.21-0.40**: Fair
+- **0.41-0.60**: Moderate
+- **0.61-0.80**: Substantial
+- **0.81-1.00**: Almost perfect
+
+```{r table2-fleiss-kappa}
+# Calculate Fleiss' Kappa for each vignette
+fleiss_results <- data %>%
+  group_by(question, vignette_label, vignette_class, question_type) %>%
+  reframe({
+    physicians <- unique(physician_id)
+    decisions_vec <- character(length(physicians))
+
+    for (i in seq_along(physicians)) {
+      phys_decision <- decision[physician_id == physicians[i]]
+      decisions_vec[i] <- ifelse(length(phys_decision) > 0, phys_decision[1], NA)
+    }
+
+    decision_codes <- as.numeric(factor(decisions_vec, levels = c("Medevac", "Commercial", "Remain")))
+
+    if (length(unique(na.omit(decision_codes))) > 1) {
+      rating_matrix <- matrix(decision_codes, nrow = 1)
+      kappa_result <- tryCatch({
+        kappam.fleiss(rating_matrix)
+      }, error = function(e) {
+        list(value = NA, p.value = NA)
+      })
+
+      tibble(
+        n_raters = length(na.omit(decision_codes)),
+        fleiss_kappa = round(kappa_result$value, 3),
+        p_value = ifelse(is.null(kappa_result$p.value), NA, round(kappa_result$p.value, 4)),
+        interpretation = case_when(
+          is.na(fleiss_kappa) ~ "Cannot compute",
+          fleiss_kappa < 0 ~ "Less than chance",
+          fleiss_kappa < 0.21 ~ "Slight",
+          fleiss_kappa < 0.41 ~ "Fair",
+          fleiss_kappa < 0.61 ~ "Moderate",
+          fleiss_kappa < 0.81 ~ "Substantial",
+          TRUE ~ "Almost perfect"
+        )
+      )
+    } else {
+      tibble(
+        n_raters = length(na.omit(decision_codes)),
+        fleiss_kappa = NA,
+        p_value = NA,
+        interpretation = "Perfect agreement"
+      )
+    }
+  }) %>%
+  ungroup() %>%
+  arrange(vignette_class, question)
+
+# Join with agreement data
+kappa_display <- fleiss_results %>%
+  left_join(
+    vignette_summary %>% select(vignette_label, agreement_pct, entropy),
+    by = "vignette_label"
+  ) %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    Class = vignette_class,
+    `Agreement %` = agreement_pct,
+    Entropy = entropy,
+    `Fleiss' κ` = fleiss_kappa,
+    `p-value` = p_value,
+    Interpretation = interpretation
+  )
+
+print(kappa_display)
+```
+
+## Kappa Statistics by Class
+
+```{r kappa-by-class}
+kappa_class_summary <- fleiss_results %>%
+  group_by(vignette_class) %>%
+  summarize(
+    n_vignettes = n(),
+    mean_kappa = round(mean(fleiss_kappa, na.rm = TRUE), 3),
+    median_kappa = round(median(fleiss_kappa, na.rm = TRUE), 3),
+    sd_kappa = round(sd(fleiss_kappa, na.rm = TRUE), 3),
+    min_kappa = round(min(fleiss_kappa, na.rm = TRUE), 3),
+    max_kappa = round(max(fleiss_kappa, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(vignette_class) %>%
+  rename(
+    Class = vignette_class,
+    `N Vignettes` = n_vignettes,
+    `Mean κ` = mean_kappa,
+    `Median κ` = median_kappa,
+    `SD κ` = sd_kappa,
+    `Min κ` = min_kappa,
+    `Max κ` = max_kappa
+  )
+
+print(kappa_class_summary)
+```
+
+---
+
+# Class-Specific Analyses
+
+The following sections analyze each vignette class according to its unique conceptual framework and statistical approach.
+
+---
+
+# Class A: Expert Consensus (Suggested Best Answer)
+
+**Definition:** Vignettes where expert consensus suggests one preferred management option, but reasonable alternatives exist.
+
+**Objective:** Measure alignment with expert guidance and degree of agreement among physicians.
+
+**Note:** This analysis requires expert reference answers for each Class A vignette to be added to the dataset.
+
+```{r class-a-data}
+# Filter Class A data
+class_a_data <- data %>% filter(vignette_class == "A")
+class_a_vignettes <- vignette_summary %>% filter(vignette_class == "A")
+
+cat("**Class A Summary**\n\n")
+cat(sprintf("- Number of vignettes: %d\n", nrow(class_a_vignettes)))
+cat(sprintf("- Total responses: %d\n", nrow(class_a_data)))
+cat(sprintf("- Mean agreement: %.1f%% (SD = %.1f)\n",
+            mean(class_a_vignettes$agreement_pct),
+            sd(class_a_vignettes$agreement_pct)))
+cat(sprintf("- Mean entropy: %.3f (SD = %.3f)\n",
+            mean(class_a_vignettes$entropy),
+            sd(class_a_vignettes$entropy)))
+cat(sprintf("- Mean Fleiss' κ: %.3f\n",
+            mean(fleiss_results$fleiss_kappa[fleiss_results$vignette_class == "A"], na.rm = TRUE)))
+```
+
+## Descriptive Statistics
+
+```{r class-a-descriptive}
+class_a_summary <- class_a_vignettes %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    `Question Type` = question_type,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+print(class_a_summary)
+```
+
+---
+
+# Class B: Expert Boundary (One Discouraged Answer)
+
+**Definition:** Vignettes with one clearly discouraged or clinically inappropriate option; two responses considered acceptable.
+
+**Objective:** Identify how consistently clinicians avoid the discouraged response.
+
+**Note:** Requires expert classification of which option is "discouraged" for each Class B vignette.
+
+```{r class-b-data}
+class_b_data <- data %>% filter(vignette_class == "B")
+class_b_vignettes <- vignette_summary %>% filter(vignette_class == "B")
+
+cat("**Class B Summary**\n\n")
+cat(sprintf("- Number of vignettes: %d\n", nrow(class_b_vignettes)))
+cat(sprintf("- Total responses: %d\n", nrow(class_b_data)))
+cat(sprintf("- Mean agreement: %.1f%% (SD = %.1f)\n",
+            mean(class_b_vignettes$agreement_pct),
+            sd(class_b_vignettes$agreement_pct)))
+cat(sprintf("- Mean entropy: %.3f (SD = %.3f)\n",
+            mean(class_b_vignettes$entropy),
+            sd(class_b_vignettes$entropy)))
+cat(sprintf("- Mean Fleiss' κ: %.3f\n",
+            mean(fleiss_results$fleiss_kappa[fleiss_results$vignette_class == "B"], na.rm = TRUE)))
+```
+
+## Descriptive Statistics
+
+```{r class-b-descriptive}
+class_b_summary <- class_b_vignettes %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    `Question Type` = question_type,
+    `Medevac %` = pct_medevac,
+    `Commercial %` = pct_commercial,
+    `Remain %` = pct_remain,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+print(class_b_summary)
+```
+
+## Binomial Test
+
+Testing whether the frequency of each decision differs from chance (33.3%).
+
+```{r class-b-binomial}
+# Test for each decision type - using rowwise for binomial test
+binomial_results <- class_b_data %>%
+  group_by(vignette_label, decision) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  group_by(vignette_label) %>%
+  mutate(
+    total = sum(count),
+    observed_prop = count / total,
+    expected_prop = 1/3
+  ) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(
+    binom_p = binom.test(count, total, p = 1/3)$p.value
+  ) %>%
+  ungroup()
+
+# Summary by decision type across all Class B vignettes
+binomial_summary <- class_b_data %>%
+  group_by(decision) %>%
+  summarize(
+    n_responses = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    total_possible = nrow(class_b_data),
+    observed_pct = round(100 * n_responses / total_possible, 1),
+    expected_pct = 33.3
+  ) %>%
+  rowwise() %>%
+  mutate(
+    binom_test_p = binom.test(n_responses, total_possible, p = 1/3)$p.value
+  ) %>%
+  ungroup()
+
+print(binomial_summary)
+```
+
+---
+
+# Class C: Ambiguous (All Plausible Options)
+
+**Definition:** Vignettes intentionally designed with high uncertainty where all three options are clinically reasonable.
+
+**Objective:** Characterize decision diversity and patterns under ambiguity.
+
+```{r class-c-data}
+class_c_data <- data %>% filter(vignette_class == "C")
+class_c_vignettes <- vignette_summary %>% filter(vignette_class == "C")
+
+cat("**Class C Summary**\n\n")
+cat(sprintf("- Number of vignettes: %d\n", nrow(class_c_vignettes)))
+cat(sprintf("- Total responses: %d\n", nrow(class_c_data)))
+cat(sprintf("- Mean agreement: %.1f%% (SD = %.1f)\n",
+            mean(class_c_vignettes$agreement_pct),
+            sd(class_c_vignettes$agreement_pct)))
+cat(sprintf("- Mean entropy: %.3f (SD = %.3f) - **Higher = Greater Diversity**\n",
+            mean(class_c_vignettes$entropy),
+            sd(class_c_vignettes$entropy)))
+cat(sprintf("- Mean Fleiss' κ: %.3f\n",
+            mean(fleiss_results$fleiss_kappa[fleiss_results$vignette_class == "C"], na.rm = TRUE)))
+```
+
+## Descriptive Statistics
+
+```{r class-c-descriptive}
+class_c_summary <- class_c_vignettes %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    `Medevac %` = pct_medevac,
+    `Commercial %` = pct_commercial,
+    `Remain %` = pct_remain,
+    Entropy = entropy,
+    `Agreement %` = agreement_pct,
+    `Mean Conf.` = mean_confidence
+  )
+
+print(class_c_summary)
+```
+
+## Chi-Square Goodness-of-Fit Test
+
+Testing for deviation from equal distribution (33.3% each option).
+
+```{r class-c-chisq}
+chisq_results <- class_c_data %>%
+  group_by(vignette_label) %>%
+  summarize(
+    n_medevac = sum(decision == "Medevac"),
+    n_commercial = sum(decision == "Commercial"),
+    n_remain = sum(decision == "Remain"),
+    total = n(),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    chisq_stat = {
+      observed <- c(n_medevac, n_commercial, n_remain)
+      expected <- rep(total/3, 3)
+      sum((observed - expected)^2 / expected)
+    },
+    chisq_p = pchisq(chisq_stat, df = 2, lower.tail = FALSE)
+  ) %>%
+  select(Vignette = vignette_label, `χ² Statistic` = chisq_stat, `p-value` = chisq_p)
+
+print(chisq_results)
+```
+
+---
+
+# Class D: Situational (Operationally Constrained Emergencies)
+
+**Definition:** True emergencies where decisions are shaped by logistical constraints. Typically shows bimodal split (Medevac vs Remain).
+
+**Objective:** Characterize variability under operational constraints - variation itself is meaningful.
+
+```{r class-d-data}
+class_d_data <- data %>% filter(vignette_class == "D")
+class_d_vignettes <- vignette_summary %>% filter(vignette_class == "D")
+
+cat("**Class D Summary**\n\n")
+cat(sprintf("- Number of vignettes: %d\n", nrow(class_d_vignettes)))
+cat(sprintf("- Total responses: %d\n", nrow(class_d_data)))
+cat(sprintf("- Mean agreement: %.1f%% (SD = %.1f)\n",
+            mean(class_d_vignettes$agreement_pct),
+            sd(class_d_vignettes$agreement_pct)))
+cat(sprintf("- Mean entropy: %.3f (SD = %.3f)\n",
+            mean(class_d_vignettes$entropy),
+            sd(class_d_vignettes$entropy)))
+cat(sprintf("- Mean %% Medevac: %.1f%%\n",
+            mean(class_d_vignettes$pct_medevac)))
+cat(sprintf("- Mean %% Remain: %.1f%%\n",
+            mean(class_d_vignettes$pct_remain)))
+cat(sprintf("- Mean %% Commercial: %.1f%% (typically low)\n",
+            mean(class_d_vignettes$pct_commercial)))
+```
+
+## Descriptive Statistics
+
+```{r class-d-descriptive}
+class_d_summary <- class_d_vignettes %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    `Medevac %` = pct_medevac,
+    `Commercial %` = pct_commercial,
+    `Remain %` = pct_remain,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+print(class_d_summary)
+```
+
+## Binomial Test: Medevac vs Remain
+
+Testing whether the Medevac/Remain split differs from 50/50.
+
+```{r class-d-binomial}
+# Test for bimodal split (excluding commercial for this test)
+binomial_d_results <- class_d_data %>%
+  filter(decision %in% c("Medevac", "Remain")) %>%
+  group_by(vignette_label) %>%
+  summarize(
+    n_medevac = sum(decision == "Medevac"),
+    n_total = n(),
+    pct_medevac = round(100 * n_medevac / n_total, 1),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    binom_p = binom.test(n_medevac, n_total, p = 0.5)$p.value
+  ) %>%
+  ungroup() %>%
+  rename(
+    Vignette = vignette_label,
+    `N Medevac` = n_medevac,
+    `N Total` = n_total,
+    `% Medevac` = pct_medevac,
+    `p-value` = binom_p
+  )
+
+print(binomial_d_results)
+```
+
+---
+
+# Summary and Conclusions
+
+## Key Findings
+
+1. **Overall Agreement**: Mean agreement across all vignettes was `r round(mean(vignette_summary$agreement_pct), 1)`%
+2. **Fleiss' Kappa**: Mean κ = `r round(mean(fleiss_results$fleiss_kappa, na.rm = TRUE), 3)`
+3. **Entropy**: Mean entropy = `r round(mean(vignette_summary$entropy), 3)` (higher = more diversity)
+
+## By Class
+
+```{r summary-by-class-final}
+final_summary <- class_summary %>%
+  left_join(
+    kappa_class_summary %>% select(Class, `Mean κ`),
+    by = c("vignette_class" = "Class")
+  ) %>%
+  select(
+    Class = vignette_class,
+    `N` = n_vignettes,
+    `Mean Agreement %` = mean_agreement_pct,
+    `Mean Entropy` = mean_entropy,
+    `Mean κ` = `Mean κ`,
+    `Mean Confidence` = mean_confidence
+  )
+
+print(final_summary)
+```
+
+---
+
+**Report Generated:** `r Sys.Date()`

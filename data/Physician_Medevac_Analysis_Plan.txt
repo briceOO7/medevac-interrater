@@ -1,0 +1,226 @@
+**Statistical Analysis Plan for Physician Medevac Decision Vignettes**
+
+*Prepared for project team (Graduate Student & Fellow)*
+
+---
+
+### **Overview**
+
+In this study, 20 physicians each review a set of 20 standardized patient vignettes. For each vignette, the physician selects one of three management options:
+
+1. **Medevac**
+2. **Next commercial flight**
+3. **Remain in village**
+
+Vignettes are categorized into four conceptual classes that vary in structure, degree of uncertainty, and whether an expert reference answer exists. Each physician provides one response per vignette. Because each physician responds to multiple vignettes, the dataset involves **repeated measures (responses clustered within physician)**.
+
+---
+
+### **Vignette Mapping Table**
+
+| **Question Number** | **Question Type**                     | **Vignette Class** |
+| ------------------- | ------------------------------------- | ------------------ |
+| 1                   | Clear Medevac                         | A                  |
+| 2                   | Clear Not Medevac                     | B                  |
+| 3                   | Any Option                            | C                  |
+| 4                   | Clear Medevac                         | A                  |
+| 5                   | Clear Not Medevac                     | B                  |
+| 6                   | Clear Not Medevac                     | B                  |
+| 7                   | Clear Not Remain                      | B                  |
+| 8                   | Clear Remain                          | A                  |
+| 9                   | Clear Commercial                      | A                  |
+| 10                  | Clear Not Remain                      | B                  |
+| 11                  | Clear Remain                          | A                  |
+| 12                  | Any Option                            | C                  |
+| 13                  | Clear Medevac                         | A                  |
+| 14                  | Clear Not Medevac                     | B                  |
+| 15                  | Clear Commercial                      | A                  |
+| 16                  | Conflict Between Physiology/Logistics | D                  |
+| 17                  | Conflict Between Physiology/Logistics | D                  |
+| 18                  | Conflict Between Physiology/Logistics | D                  |
+| 19                  | Clear Medevac                         | A                  |
+| 20                  | Any Option                            | C                  |
+
+---
+
+## **Vignette Classes and Statistical Approach**
+
+### **Class A: Expert Consensus (Suggested Best Answer)**
+
+**Definition:** Vignettes where expert consensus suggests one preferred management option, but reasonable alternatives exist. The objective is to measure alignment with expert guidance and the degree of agreement among physicians.
+
+**Descriptive Statistics:**
+
+* Proportion of physicians selecting the expert-recommended option per vignette
+* Shannon entropy to quantify overall decision diversity
+* Mean ± SD of consensus rate across vignettes
+
+**Analytic Statistic:**
+
+* **Fleiss' κ** to quantify interrater agreement beyond chance (reported at class level)
+* **Mixed-effects logistic regression (GLMM)** modeling selection of the expert-consensus option:
+  logit(P(Consensus)) = β₀ + (1|Physician) + (1|Vignette)
+  Random intercepts capture both physician-level tendencies and vignette difficulty.
+* **Cohen's κ (optional)** comparing each physician's responses against expert panel selections.
+
+**Visualization:**
+
+* Heatmap (rows = physicians, columns = vignettes, green = consensus, white = non-consensus)
+* Bar plots of consensus proportion by vignette and physician
+
+---
+
+### **Class B: Expert Boundary (One Discouraged Answer)**
+
+**Definition:** Vignettes with one clearly discouraged or clinically inappropriate option identified by experts; two responses are considered acceptable. The analysis focuses on identifying how consistently clinicians avoid the discouraged response.
+
+**Descriptive Statistics:**
+
+* % of physicians choosing the discouraged option per vignette
+* Shannon entropy for decision spread
+* Mean ± SD of avoidance rates
+
+**Analytic Statistic:**
+
+* **Fleiss' κ** across all three options to quantify agreement on exclusion of the discouraged option (reported by class)
+* **Mixed-effects logistic model (acceptable vs discouraged):**
+  logit(P(Acceptable)) = β₀ + (1|Physician) + (1|Vignette)
+* **Binomial test** against p = 1/3 to compare observed discouraged-choice frequency to chance.
+
+**Visualization:**
+
+* Stacked bar charts showing proportion of acceptable vs discouraged decisions per vignette
+* 3-color heatmap (two acceptable options vs one discouraged option)
+
+---
+
+### **Class C: Ambiguous (All Plausible Options)**
+
+**Definition:** Vignettes intentionally designed with high uncertainty, where all three options are clinically reasonable. The focus is on characterizing decision diversity and patterns of agreement under ambiguity.
+
+**Descriptive Statistics:**
+
+* Frequency of each option per vignette
+* **Shannon entropy** (higher = greater diversity)
+
+**Analytic Statistic:**
+
+* **Chi-square goodness-of-fit test** for deviation from equal distribution
+* **Fleiss' κ** for overall interrater agreement across three categories (reported at class level)
+* **Mixed-effects logistic models (binary contrasts)** for robustness checks, e.g., medevac vs other, remain vs other.
+
+**Visualization:**
+
+* 3-color heatmap (rows = physicians, columns = vignettes)
+* **Ternary plot** of response proportions (A/B/C) to illustrate balance
+
+---
+
+### **Class D: Situational (Operationally Constrained Emergencies)**
+
+**Definition:** Vignettes depicting true emergencies (e.g., cardiac arrest, major trauma) where the decision is shaped by logistical constraints such as air transport delays in rural Alaska. There is no correct or incorrect answer—variability itself is meaningful.
+
+**Expected Pattern:**
+
+* Typically a **bimodal split**: some physicians select "Medevac," others "Remain in village." "Commercial flight" is rarely chosen.
+
+**Descriptive Statistics:**
+
+* Proportion choosing each option (usually medevac vs remain)
+* Mean and variance of medevac rates per vignette
+* Shannon entropy per vignette
+
+**Analytic Statistic:**
+
+* **Exact binomial test** to compare observed split against expected 50/50 distribution
+* **Mixed-effects logistic model** to account for physician- and vignette-level effects:
+  logit(P(Medevac)) = β₀ + (1|Physician) + (1|Vignette)
+* κ is not emphasized here, as variation itself—not agreement—is the outcome of interest.
+
+**Visualization:**
+
+* Diverging bar plots (percent medevac vs remain per vignette)
+* Two-color heatmap (rows = physicians, columns = vignettes)
+* Density plot of physician medevac probabilities to visualize bimodality
+
+---
+
+## **Rationale for Repeated-Measures (Mixed-Effects) Modeling**
+
+Although each physician rates each vignette only once, the dataset contains **multiple responses per physician**. These responses are **not independent**, as each physician's individual reasoning, risk tolerance, and evacuation threshold shape their responses across all cases. Physicians differ systematically in baseline propensity to choose medevac versus conservative management, creating intra-physician correlation.
+
+Mixed-effects models explicitly account for this by including **random intercepts** for physicians, representing their unique decision tendencies, and **random intercepts for vignettes** to capture inherent difficulty or ambiguity. This structure partitions variance into within- and between-physician components, preventing inflated precision and type I error. The result is a more valid estimate of both clinician variability and vignette-specific effects.
+
+---
+
+## **Sample Size and Feasibility Considerations**
+
+The dataset includes **20 physicians × 20 vignettes = 400 observations**, providing adequate power for descriptive and agreement analyses, and moderate power for mixed-effects modeling.
+
+**Descriptive and κ Analyses:**
+
+* Fleiss' κ is well suited for 20 raters and yields stable estimates even with moderate n.
+* Class-level κ values will be more stable than individual vignette-level estimates; reporting by class is recommended.
+* Shannon entropy, proportions, and barplots remain robust regardless of sample size.
+
+**Binomial and χ² Tests:**
+
+* With 20 raters per vignette, these tests are fully appropriate. For very small cell counts (e.g., only 0–1 respondents choosing an option), exact tests or category collapsing may be used.
+
+**Mixed-Effects Logistic Models:**
+
+* Binary GLMMs with random intercepts for physician and vignette are feasible with this dataset size.
+* If convergence issues occur (e.g., due to sparse outcomes), simplify to random intercepts for physician only or treat vignette as a fixed effect.
+* Multinomial mixed models (Class C) are computationally heavier; simpler binary contrasts can be substituted.
+* Results should be interpreted descriptively rather than inferentially due to the small clinician sample.
+
+**Situational Class (D):**
+
+* Binary outcomes (Medevac vs Remain) are ideal for exact binomial tests and GLMMs.
+* Variation across physicians is the primary finding, not agreement.
+
+**Summary Recommendation:**
+
+* Conduct analyses and report results **by class**, aggregating vignettes within each class to stabilize κ and GLMM estimates.
+* Emphasize descriptive and agreement findings (κ, entropy, distributions) over inferential statistics where data sparsity limits precision.
+
+---
+
+## **Standardized Analytic Framework Across Classes**
+
+Each vignette class will include the following analytic layers:
+
+1. **Descriptive:** Frequency table, proportion of key choices, entropy.
+2. **Agreement:** Fleiss' κ (Classes A–C).
+3. **Modeling:** GLMM (binary or multinomial) with random intercepts for physician and vignette.
+4. **Distribution Testing:** χ² or binomial test where appropriate.
+5. **Visualization:** Standardized heatmaps, barplots, and summary plots of response distribution.
+
+---
+
+## **Summary Table**
+
+| Class                   | Conceptual Focus                          | Expert Reference | Descriptive                  | Analytic                         | Visualization                   |
+| ----------------------- | ----------------------------------------- | ---------------- | ---------------------------- | -------------------------------- | ------------------------------- |
+| **A. Expert Consensus** | Alignment with expert recommendation      | ✅                | % consensus; entropy         | Fleiss' κ; GLMM; Cohen's κ       | Binary heatmap; barplots        |
+| **B. Expert Boundary**  | Avoidance of discouraged option           | ✅                | % discouraged; entropy       | Fleiss' κ; GLMM; binomial test   | 3-color heatmap; stacked bars   |
+| **C. Ambiguous**        | Decision diversity under uncertainty      | ❌                | Option frequencies; entropy  | χ² test; Fleiss' κ; binary GLMMs | 3-color heatmap; ternary plot   |
+| **D. Situational**      | Variability under operational constraints | ❌                | % medevac vs remain; entropy | Binomial test; GLMM              | Diverging bars; 2-color heatmap |
+
+---
+
+## **Next Steps for Implementation**
+
+1. Structure dataset with columns: `physician`, `vignette`, `class`, `decision`, `expert_choice` (A/B/C), and derived indicators (`is_consensus`, `is_discouraged`).
+2. Generate per-vignette and per-class descriptive summaries and entropy measures.
+3. Compute κ statistics for agreement (Classes A–C) and report at class level.
+4. Run GLMM analyses to account for clustering by physician and vignette.
+5. Visualize patterns using standardized heatmaps, barplots, ternary or density plots.
+6. Emphasize descriptive and agreement results as the primary findings.
+
+---
+
+**References:**
+
+* McCulloch, Searle, & Neuhaus (2008). *Generalized, Linear, and Mixed Models.* Wiley.
+* Hallgren, K. A. (2012). *Computing inter-rater reliability for observational data: an overview and tutorial.* *Tutorials in Quantitative Methods for Psychology*, 8(1), 23–34.

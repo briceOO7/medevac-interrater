@@ -1,0 +1,732 @@
+---
+title: "Medevac Interrater Reliability Study"
+subtitle: "Part 2: Descriptive Statistics"
+author: "Medevac Interrater Study Team"
+date: today
+format:
+  pdf:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    fig-width: 10
+    fig-height: 6
+    keep-tex: false
+    include-in-header:
+      text: |
+        \usepackage{xcolor}
+        \definecolor{darkgreen}{RGB}{0,100,0}
+        \definecolor{orange}{RGB}{255,165,0}
+        \usepackage{pdflscape}
+        \usepackage{rotating}
+    execute:
+      echo: false
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(here)
+library(patchwork)
+library(irr)
+library(irrCAC)  # For Gwet's AC1
+library(lme4)  # For mixed-effects models
+library(pheatmap)  # For heatmaps
+library(tibble)  # For data manipulation
+library(scales)  # For scale formatting
+library(psych)  # For additional statistics
+library(effsize)  # For effect sizes
+
+# Load processed data
+data <- read.csv(here::here("data", "processed", "survey_data_processed.csv"), 
+                 stringsAsFactors = FALSE)
+```
+# Introduction
+
+This report presents the analysis of physician medevac decision-making across 20 standardized clinical vignettes following the statistical analysis plan. Each of 20 physicians evaluated all vignettes and selected one of three management options:
+
+- **Medevac**: Immediate medical evacuation
+- **Commercial**: Next available commercial flight  
+- **Remain**: Remain in village for observation/treatment
+
+Each physician also provided a confidence rating (1-10 scale) for their decision. Because each physician responds to multiple vignettes, the dataset involves **repeated measures (responses clustered within physician)**.
+
+## Vignette Classes Overview
+
+The 20 clinical vignettes are organized into four distinct classes designed to test different aspects of clinical decision-making in remote settings. See Table 1 for detailed descriptions and summary statistics for each class and subclass.
+
+---
+
+# Table 1: Vignette Class Descriptions and Summary Statistics
+
+This table provides a comprehensive overview of the 20 clinical vignettes organized by class and subclass, including clear descriptions of each vignette type and summary statistics across all 20 physicians.
+
+```{r table1-overall-scoring}
+# Calculate summary statistics for each vignette - ensure one row per vignette
+vignette_decisions <- data %>%
+  group_by(question) %>%
+  summarise(
+    decisions = list(decision),
+    confidences = list(confidence),
+    .groups = "drop"
+  )
+
+vignette_info <- data %>%
+  distinct(question, vignette_label, question_type, vignette_class)
+
+vignette_summary <- vignette_info %>%
+  left_join(vignette_decisions, by = "question") %>%
+  rowwise() %>%
+  mutate(
+    n_physicians = length(decisions),
+    n_medevac = sum(decisions == "Medevac"),
+    n_commercial = sum(decisions == "Commercial"),
+    n_remain = sum(decisions == "Remain"),
+    pct_medevac = round(100 * n_medevac / n_physicians, 1),
+    pct_commercial = round(100 * n_commercial / n_physicians, 1),
+    pct_remain = round(100 * n_remain / n_physicians, 1),
+    # Calculate modal decision and count directly
+    modal_decision = {
+      freq_table <- table(decisions)
+      names(which.max(freq_table))[1]  # Take first if tie
+    },
+    modal_count = {
+      freq_table <- table(decisions)
+      max(freq_table)
+    },
+    agreement_pct = round(100 * modal_count / n_physicians, 1),
+    mean_confidence = round(mean(unlist(confidences), na.rm = TRUE), 1),
+    sd_confidence = round(sd(unlist(confidences), na.rm = TRUE), 1),
+    # Calculate Shannon entropy
+    entropy = {
+      probs <- c(n_medevac, n_commercial, n_remain) / n_physicians
+      probs <- probs[probs > 0]
+      if(length(probs) <= 1) 0 else -sum(probs * log(probs))
+    },
+    # Create subclasses for Class A and B
+    subclass = case_when(
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "No Medevac",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "No Remain",
+      TRUE ~ vignette_class
+    )
+  ) %>%
+  ungroup() %>%
+  select(-decisions, -confidences) %>%
+  arrange(vignette_class, question)
+
+# Create comprehensive Table 1 with descriptions and statistics
+table1_data <- data.frame(
+  Class = c(
+    "Right Answer", "Right Answer", "Right Answer", "Right Answer",
+    "Wrong Answer", "Wrong Answer", "Wrong Answer",
+    "Ambiguous", "Situational"
+  ),
+  Type = c(
+    "Overall", "Medevac", "Commercial", "Remain",
+    "Overall", "No Medevac", "No Remain",
+    "Overall", "Overall"
+  ),
+  Description = c(
+    "Clear cases where one management option is definitively correct/preferred",
+    "Cases where immediate medevac is the right choice (e.g., unstable patient)",
+    "Cases where commercial flight is the right choice (e.g., stable patient)",
+    "Cases where remaining in village is the right choice (e.g., minimal symptoms)",
+    "Cases where one management option should definitively be avoided",
+    "Cases where medevac is inappropriate/wrong (e.g., stable, transport would worsen condition)",
+    "Cases where remaining in village is inappropriate/wrong (e.g., needs urgent care)",
+    "Cases where all three options are clinically reasonable - physician judgment critical",
+    "True emergencies with logistical constraints - decisions shaped by operational factors"
+  ),
+  `N Vignettes` = c(8, 4, 2, 2, 6, 4, 2, 3, 3),
+  `Mean Agree%` = c(
+    round(mean(vignette_summary$agreement_pct[vignette_summary$vignette_class == "A"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$subclass == "Medevac"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$subclass == "Commercial"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$subclass == "Remain"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$vignette_class == "B"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$subclass == "No Medevac"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$subclass == "No Remain"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$vignette_class == "C"]), 1),
+    round(mean(vignette_summary$agreement_pct[vignette_summary$vignette_class == "D"]), 1)
+  ),
+  `Mean Entropy` = c(
+    round(mean(vignette_summary$entropy[vignette_summary$vignette_class == "A"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$subclass == "Medevac"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$subclass == "Commercial"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$subclass == "Remain"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$vignette_class == "B"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$subclass == "No Medevac"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$subclass == "No Remain"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$vignette_class == "C"]), 3),
+    round(mean(vignette_summary$entropy[vignette_summary$vignette_class == "D"]), 3)
+  ),
+  `Mean Conf` = c(
+    round(mean(vignette_summary$mean_confidence[vignette_summary$vignette_class == "A"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$subclass == "Medevac"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$subclass == "Commercial"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$subclass == "Remain"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$vignette_class == "B"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$subclass == "No Medevac"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$subclass == "No Remain"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$vignette_class == "C"]), 1),
+    round(mean(vignette_summary$mean_confidence[vignette_summary$vignette_class == "D"]), 1)
+  )
+)
+```
+
+```{r table1-landscape-begin}
+#| echo: false
+#| results: asis
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+  cat("\\tiny\n")  # Use smallest standard font size
+  cat("\\begin{center}\n")  # Center the table
+}
+```
+
+```{r table1-display}
+#| results: asis
+kable(table1_data,
+      caption = "Table 1: Vignette Class Descriptions and Summary Statistics",
+      align = c("l", "l", "l", "c", "r", "r", "r"),
+      digits = c(0, 0, 0, 0, 1, 3, 1),
+      booktabs = knitr::is_latex_output()) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = if (knitr::is_latex_output()) "left" else "center",
+    latex_options = if (knitr::is_latex_output()) c("scale_down", "hold_position") else NULL
+  ) %>%
+  pack_rows("Right Answer", 1, 4) %>%
+  pack_rows("Wrong Answer", 5, 7) %>%
+  pack_rows("Ambiguous", 8, 8) %>%
+  pack_rows("Situational", 9, 9) %>%
+  column_spec(1, bold = TRUE) %>%  # Class column bold only
+  print()
+```
+
+```{r table1-landscape-end}
+#| echo: false
+#| results: asis
+if (knitr::is_latex_output()) {
+  cat("\\end{center}\n")  # Close center environment
+  cat("\\normalsize\n")  # Restore normal font size
+  cat("\\end{landscape}\n")
+}
+```
+
+## Summary by Vignette
+
+This section provides detailed statistics for each of the 20 individual vignettes, showing their performance across all physicians before aggregating to class-level summaries.
+
+```{r summary-by-vignette}
+# Create detailed summary table for each vignette
+vignette_detail_table <- vignette_summary %>%
+  arrange(vignette_class, question) %>%  # Sort first
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    Subclass = subclass,
+    `Medevac %` = pct_medevac,
+    `Commercial %` = pct_commercial,
+    `Remain %` = pct_remain,
+    `Modal Decision` = modal_decision,
+    `Agreement %` = agreement_pct,
+    Entropy = entropy,
+    `Mean Conf.` = mean_confidence
+  )
+
+# Use landscape orientation for this detailed table
+```
+
+```{r vignette-landscape-begin}
+#| echo: false
+#| results: asis
+if (knitr::is_latex_output()) {
+  cat("\\begin{landscape}\n")
+}
+```
+
+```{r vignette-display}
+kable(vignette_detail_table,
+      caption = "Summary Statistics by Individual Vignette",
+      align = c("c", "c", "l", "r", "r", "r", "l", "r", "r", "r"),
+      digits = c(0, 0, 0, 1, 1, 1, 0, 1, 3, 1)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  ) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(3, bold = TRUE) %>%
+  column_spec(8, bold = TRUE, color = ifelse(
+    vignette_detail_table$`Agreement %` >= 75, "darkgreen",
+    ifelse(vignette_detail_table$`Agreement %` >= 50, "orange", "red")
+  ))
+```
+
+```{r vignette-landscape-end}
+#| echo: false
+#| results: asis
+if (knitr::is_latex_output()) {
+  cat("\\end{landscape}\n")
+}
+```
+
+---
+
+## Summary Statistics
+
+### Overall Summary
+
+```{r summary-stats-overall}
+summary_stats <- data.frame(
+  Metric = c(
+    "Total Vignettes",
+    "Total Physicians", 
+    "Total Responses",
+    "Mean Agreement %",
+    "Median Agreement %",
+    "Agreement Range",
+    "Mean Confidence",
+    "Mean Entropy",
+    "Vignettes with ≥75% Agreement",
+    "Vignettes with <50% Agreement"
+  ),
+  Value = c(
+    length(unique(data$question)),
+    length(unique(data$physician_id)),
+    nrow(data),
+    paste0(round(mean(vignette_summary$agreement_pct), 1), "%"),
+    paste0(round(median(vignette_summary$agreement_pct), 1), "%"),
+    paste0(min(vignette_summary$agreement_pct), "% - ", 
+           max(vignette_summary$agreement_pct), "%"),
+    round(mean(data$confidence, na.rm = TRUE), 1),
+    round(mean(vignette_summary$entropy), 3),
+    sum(vignette_summary$agreement_pct >= 75),
+    sum(vignette_summary$agreement_pct < 50)
+  )
+)
+
+kable(summary_stats,
+      caption = "Overall Study Metrics",
+      col.names = c("Metric", "Value"),
+      align = c("l", "r")) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    full_width = FALSE,
+    position = "left"
+  ) %>%
+  column_spec(2, bold = TRUE)
+```
+
+### Summary by Vignette Class (A → D)
+
+```{r summary-by-class}
+#| results: asis
+# Calculate summary statistics by vignette class
+class_summary <- vignette_summary %>%
+  group_by(vignette_class) %>%
+  summarize(
+    n_vignettes = n(),
+    mean_agreement_pct = round(mean(agreement_pct), 1),
+    median_agreement_pct = round(median(agreement_pct), 1),
+    sd_agreement_pct = round(sd(agreement_pct), 1),
+    mean_entropy = round(mean(entropy), 3),
+    sd_entropy = round(sd(entropy), 3),
+    mean_confidence = round(mean(mean_confidence), 1),
+    sd_confidence = round(sd(mean_confidence), 1),
+    .groups = "drop"
+  ) %>%
+  arrange(vignette_class)
+
+# Calculate summary statistics by subclass (for Classes A and B)
+subclass_summary <- vignette_summary %>%
+  filter(vignette_class %in% c("A", "B")) %>%
+  group_by(subclass) %>%
+  summarize(
+    n_vignettes = n(),
+    mean_agreement_pct = round(mean(agreement_pct), 1),
+    median_agreement_pct = round(median(agreement_pct), 1),
+    sd_agreement_pct = round(sd(agreement_pct), 1),
+    mean_entropy = round(mean(entropy), 3),
+    sd_entropy = round(sd(entropy), 3),
+    mean_confidence = round(mean(mean_confidence), 1),
+    sd_confidence = round(sd(mean_confidence), 1),
+    .groups = "drop"
+  ) %>%
+  arrange(subclass)
+
+# Create display table combining class and subclass summaries
+class_summary_display <- class_summary %>%
+  mutate(
+    Group = vignette_class,
+    Type = "Class"
+  ) %>%
+  select(
+    Group,
+    Type,
+    `N Vignettes` = n_vignettes,
+    `Mean Agree%` = mean_agreement_pct,
+    `SD Agree` = sd_agreement_pct,
+    `Mean Entropy` = mean_entropy,
+    `SD Entropy` = sd_entropy,
+    `Mean Conf` = mean_confidence,
+    `SD Conf` = sd_confidence
+  )
+
+subclass_summary_display <- subclass_summary %>%
+  mutate(Group = case_when(
+    subclass %in% c("Medevac", "Commercial", "Remain") ~ "A",
+    subclass %in% c("No Medevac", "No Remain") ~ "B",
+    TRUE ~ "Other"
+  )) %>%
+  select(
+    Group,
+    Type = subclass,
+    `N Vignettes` = n_vignettes,
+    `Mean Agree%` = mean_agreement_pct,
+    `SD Agree` = sd_agreement_pct,
+    `Mean Entropy` = mean_entropy,
+    `SD Entropy` = sd_entropy,
+    `Mean Conf` = mean_confidence,
+    `SD Conf` = sd_confidence
+  )
+
+combined_summary <- bind_rows(class_summary_display, subclass_summary_display)
+
+kable(combined_summary,
+      caption = "Summary Statistics by Vignette Class and Subclass",
+      align = c("c", "l", "c", "r", "r", "r", "r", "r", "r")) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  ) %>%
+  pack_rows("Class A (Right Answer)", 1, 1) %>%
+  pack_rows("A Subclasses", 2, 4) %>%
+  pack_rows("Class B (Wrong Answer)", 5, 5) %>%
+  pack_rows("B Subclasses", 6, 7) %>%
+  pack_rows("Class C (Ambiguous)", 8, 8) %>%
+  pack_rows("Class D (Situational)", 9, 9)
+```
+
+### Visualization: Comparison Across Classes
+
+```{r class-comparison-plot, fig.height=6, fig.width=10}
+# Agreement plot
+p1 <- ggplot(class_summary, aes(x = vignette_class, y = mean_agreement_pct, fill = vignette_class)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_agreement_pct - sd_agreement_pct, 
+                    ymax = mean_agreement_pct + sd_agreement_pct),
+                width = 0.2) +
+  geom_text(aes(label = paste0(mean_agreement_pct, "%")), vjust = -0.5, size = 4, fontface = "bold") +
+  scale_fill_viridis_d(option = "viridis", begin = 0.3, end = 0.8) +
+  labs(title = "Mean Agreement by Class", x = "Vignette Class", y = "Mean Agreement %") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 12), legend.position = "none") +
+  ylim(0, 100)
+
+# Entropy plot
+p2 <- ggplot(class_summary, aes(x = vignette_class, y = mean_entropy, fill = vignette_class)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_entropy - sd_entropy, 
+                    ymax = mean_entropy + sd_entropy),
+                width = 0.2) +
+  geom_text(aes(label = round(mean_entropy, 2)), vjust = -0.5, size = 4, fontface = "bold") +
+  scale_fill_viridis_d(option = "viridis", begin = 0.3, end = 0.8) +
+  labs(title = "Mean Entropy by Class", x = "Vignette Class", y = "Shannon Entropy") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 12), legend.position = "none") +
+  ylim(0, max(class_summary$mean_entropy + class_summary$sd_entropy) * 1.2)
+
+p1 + p2
+```
+
+---
+
+# Table 2: Interrater Reliability Metrics (Gwet's AC1)
+
+## Replacement of Kappa with Gwet's AC1
+
+Because many vignettes were intentionally designed with one dominant "correct" response (e.g., clear medevac or clear remain), class prevalence is highly unbalanced. In such cases, Cohen's κ and Fleiss' κ produce spuriously low or even negative values despite high raw agreement—a phenomenon known as the kappa paradox.
+
+To address this, interrater reliability was recalculated using **Gwet's AC1**, which provides a more stable and interpretable measure under unbalanced category distributions. AC1 corrects the expected-by-chance term using an adjusted probability of agreement that is insensitive to marginal prevalence.
+
+For this study:
+- **Class A (Right Answer)** and **Class B (Wrong Answer)** are analyzed using Gwet's AC1 instead of κ
+- **Classes C and D** retain their descriptive and distributional analyses (entropy, binomial/χ² tests) since agreement per se is not the central construct
+
+The resulting AC1 values better reflect true rater alignment with expert expectations and inter-clinician consistency.
+
+Gwet's AC1 measures agreement among multiple raters while accounting for chance agreement in unbalanced distributions.
+
+**Interpretation:**
+- **< 0.20**: Slight agreement
+- **0.21-0.40**: Fair agreement
+- **0.41-0.60**: Moderate agreement
+- **0.61-0.80**: Substantial agreement
+- **0.81-1.00**: Almost perfect agreement
+
+```{r table2-gwet-ac1}
+# Calculate Gwet's AC1 for each vignette (Classes A and B only)
+ac1_results <- data %>%
+  filter(vignette_class %in% c("A", "B")) %>%  # Only apply to Classes A and B
+  left_join(vignette_summary %>% select(question, subclass), by = "question") %>%
+  group_by(question, vignette_label, vignette_class, question_type, subclass) %>%
+  reframe({
+    physicians <- unique(physician_id)
+    decisions_vec <- character(length(physicians))
+
+    for (i in seq_along(physicians)) {
+      phys_decision <- decision[physician_id == physicians[i]]
+      decisions_vec[i] <- ifelse(length(phys_decision) > 0, phys_decision[1], NA)
+    }
+
+    # Convert to numeric codes (1=Medevac, 2=Commercial, 3=Remain)
+    decision_codes <- as.numeric(factor(decisions_vec, levels = c("Medevac", "Commercial", "Remain")))
+
+    if (length(unique(na.omit(decision_codes))) > 1) {
+      # Create ratings matrix for irrCAC (columns = raters, rows = items)
+      ratings_matrix <- matrix(decision_codes, nrow = 1)
+
+      ac1_result <- tryCatch({
+        result <- gwet.ac1.raw(ratings_matrix)
+        list(est = result$est$coeff.val, p.value = result$est$p.value)
+      }, error = function(e) {
+        list(est = NA, p.value = NA)
+      })
+
+      tibble(
+        n_raters = length(na.omit(decision_codes)),
+        gwet_ac1 = round(ac1_result$est, 3),
+        p_value = ifelse(is.na(ac1_result$p.value), NA, round(ac1_result$p.value, 4)),
+        interpretation = case_when(
+          is.na(gwet_ac1) ~ "Cannot compute",
+          gwet_ac1 < 0.20 ~ "Slight",
+          gwet_ac1 < 0.41 ~ "Fair",
+          gwet_ac1 < 0.61 ~ "Moderate",
+          gwet_ac1 < 0.81 ~ "Substantial",
+          TRUE ~ "Almost perfect"
+        )
+      )
+    } else {
+      tibble(
+        n_raters = length(na.omit(decision_codes)),
+        gwet_ac1 = NA,
+        p_value = NA,
+        interpretation = "Perfect agreement"
+      )
+    }
+  }) %>%
+  ungroup() %>%
+  arrange(vignette_class, question)
+
+# Join with agreement data
+ac1_display <- ac1_results %>%
+  left_join(
+    vignette_summary %>% select(vignette_label, agreement_pct, entropy),
+    by = "vignette_label"
+  ) %>%
+  select(
+    Vignette = vignette_label,
+    `Q#` = question,
+    Subclass = subclass,
+    `Agreement %` = agreement_pct,
+    Entropy = entropy,
+    `Gwet's AC1` = gwet_ac1,
+    `p-value` = p_value,
+    Interpretation = interpretation
+  )
+
+kable(ac1_display,
+      caption = "Table 2: Interrater Reliability Metrics - Gwet's AC1 (Classes A and B Only)",
+      align = c("c", "c", "c", "r", "r", "r", "r", "l"),
+      digits = c(0, 0, 0, 1, 3, 3, 4, 0)) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left"
+  )
+```
+
+## AC1 Statistics by Class
+
+```{r ac1-by-class}
+# AC1 statistics by class
+ac1_class_summary <- ac1_results %>%
+  group_by(vignette_class) %>%
+  summarize(
+    n_vignettes = n(),
+    mean_ac1 = round(mean(gwet_ac1, na.rm = TRUE), 3),
+    median_ac1 = round(median(gwet_ac1, na.rm = TRUE), 3),
+    sd_ac1 = round(sd(gwet_ac1, na.rm = TRUE), 3),
+    min_ac1 = round(min(gwet_ac1, na.rm = TRUE), 3),
+    max_ac1 = round(max(gwet_ac1, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(vignette_class) %>%
+  mutate(
+    Group = vignette_class,
+    Type = "Class"
+  ) %>%
+  select(
+    Group,
+    Type,
+    `N Vignettes` = n_vignettes,
+    `Mean AC1` = mean_ac1,
+    `Median AC1` = median_ac1,
+    `SD AC1` = sd_ac1,
+    `Min AC1` = min_ac1,
+    `Max AC1` = max_ac1
+  )
+
+# AC1 statistics by subclass
+ac1_subclass_summary <- ac1_results %>%
+  group_by(subclass) %>%
+  summarize(
+    n_vignettes = n(),
+    mean_ac1 = round(mean(gwet_ac1, na.rm = TRUE), 3),
+    median_ac1 = round(median(gwet_ac1, na.rm = TRUE), 3),
+    sd_ac1 = round(sd(gwet_ac1, na.rm = TRUE), 3),
+    min_ac1 = round(min(gwet_ac1, na.rm = TRUE), 3),
+    max_ac1 = round(max(gwet_ac1, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(subclass) %>%
+  mutate(Group = case_when(
+    subclass %in% c("Medevac", "Commercial", "Remain") ~ "A",
+    subclass %in% c("No Medevac", "No Remain") ~ "B",
+    TRUE ~ "Other"
+  )) %>%
+  rename(
+    Type = subclass,
+    `N Vignettes` = n_vignettes,
+    `Mean AC1` = mean_ac1,
+    `Median AC1` = median_ac1,
+    `SD AC1` = sd_ac1,
+    `Min AC1` = min_ac1,
+    `Max AC1` = max_ac1
+  ) %>%
+  select(Group, Type, everything())
+
+# Combine class and subclass summaries
+ac1_combined <- bind_rows(ac1_class_summary, ac1_subclass_summary)
+
+kable(ac1_combined,
+      caption = "Gwet's AC1 Statistics by Vignette Class and Subclass",
+      align = c("c", "l", "c", "r", "r", "r", "r", "r")) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    full_width = FALSE,
+    position = "left"
+  ) %>%
+  pack_rows("Class A (Right Answer)", 1, 1) %>%
+  pack_rows("A Subclasses", 2, 4) %>%
+  pack_rows("Class B (Wrong Answer)", 5, 5) %>%
+  pack_rows("B Subclasses", 6, 7)
+```
+
+### Visualization: AC1 by Vignette
+
+```{r ac1-plot, fig.height=7}
+# Plot AC1 values by subclass
+ac1_results %>%
+  mutate(vignette_label_factor = factor(vignette_label, levels = unique(vignette_label))) %>%
+  ggplot(aes(x = vignette_label_factor, y = gwet_ac1, fill = subclass)) +
+  geom_col() +
+  geom_hline(yintercept = 0.61, linetype = "dashed", color = "darkgreen", linewidth = 1, alpha = 0.7) +
+  geom_hline(yintercept = 0.41, linetype = "dashed", color = "orange", linewidth = 1, alpha = 0.7) +
+  geom_hline(yintercept = 0.21, linetype = "dashed", color = "red", linewidth = 1, alpha = 0.7) +
+  annotate("text", x = 1, y = 0.64, label = "Substantial", hjust = 0, size = 3, color = "darkgreen") +
+  annotate("text", x = 1, y = 0.44, label = "Moderate", hjust = 0, size = 3, color = "orange") +
+  annotate("text", x = 1, y = 0.24, label = "Fair", hjust = 0, size = 3, color = "red") +
+  scale_fill_manual(values = c(
+    "Medevac" = "#440154", "Commercial" = "#31688e", "Remain" = "#35b779",
+    "No Medevac" = "#fde724", "No Remain" = "#fdae61"
+  )) +
+  labs(
+    title = "Gwet's AC1 by Vignette and Subclass",
+    subtitle = "Higher values indicate stronger agreement beyond chance",
+    x = "Vignette",
+    y = "Gwet's AC1",
+    fill = "Subclass"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
+    legend.position = "bottom"
+  ) +
+  ylim(0, 1)
+```
+
+### Statistical Comparison of Subclasses
+
+```{r subclass-comparison}
+# Test for differences between subclasses within each class
+ac1_subclass_stats <- ac1_results %>%
+  group_by(subclass) %>%
+  summarize(
+    mean_ac1 = mean(gwet_ac1, na.rm = TRUE),
+    sd_ac1 = sd(gwet_ac1, na.rm = TRUE),
+    n = n(),
+    se_ac1 = sd_ac1 / sqrt(n),
+    ci_lower = mean_ac1 - 1.96 * se_ac1,
+    ci_upper = mean_ac1 + 1.96 * se_ac1,
+    .groups = "drop"
+  )
+
+# Pairwise comparisons for Class A subclasses
+class_a_ac1 <- ac1_results %>% filter(vignette_class == "A") %>% pull(gwet_ac1)
+a_medevac_ac1 <- ac1_results %>% filter(subclass == "A-Medevac") %>% pull(gwet_ac1)
+a_commercial_ac1 <- ac1_results %>% filter(subclass == "A-Commercial") %>% pull(gwet_ac1)
+a_remain_ac1 <- ac1_results %>% filter(subclass == "A-Remain") %>% pull(gwet_ac1)
+
+# Effect sizes (Cohen's d) for Class A comparisons
+d_medevac_commercial <- cohen.d(a_medevac_ac1, a_commercial_ac1)$estimate
+d_medevac_remain <- cohen.d(a_medevac_ac1, a_remain_ac1)$estimate
+d_commercial_remain <- cohen.d(a_commercial_ac1, a_remain_ac1)$estimate
+
+# Display subclass comparison results
+subclass_comparison <- data.frame(
+  Comparison = c("A-Medevac vs A-Commercial", "A-Medevac vs A-Remain", "A-Commercial vs A-Remain"),
+  Cohen_d = c(round(d_medevac_commercial, 2), round(d_medevac_remain, 2), round(d_commercial_remain, 2)),
+  Interpretation = c(
+    ifelse(abs(d_medevac_commercial) < 0.2, "Negligible",
+    ifelse(abs(d_medevac_commercial) < 0.5, "Small",
+    ifelse(abs(d_medevac_commercial) < 0.8, "Medium", "Large"))),
+    ifelse(abs(d_medevac_remain) < 0.2, "Negligible",
+    ifelse(abs(d_medevac_remain) < 0.5, "Small",
+    ifelse(abs(d_medevac_remain) < 0.8, "Medium", "Large"))),
+    ifelse(abs(d_commercial_remain) < 0.2, "Negligible",
+    ifelse(abs(d_commercial_remain) < 0.5, "Small",
+    ifelse(abs(d_commercial_remain) < 0.8, "Medium", "Large")))
+  )
+)
+
+kable(subclass_comparison,
+      caption = "Effect Size Comparisons Between A Subclasses",
+      col.names = c("Comparison", "Cohen's d", "Effect Size")) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    full_width = FALSE
+  )
+```
+
+---
