@@ -83,11 +83,10 @@ data <- data %>%
   mutate(
     # Primary outcome: chose medevac vs. not
     chose_medevac = ifelse(decision == "Medevac", 1, 0),
-    # Set factor levels with Never Medevac as reference (4 categories)
+    # Set factor levels with Never Medevac as reference (3 categories)
     medevac_status_label = factor(medevac_status_label,
                                    levels = c("Never Medevac",
                                             "Possible Medevac",
-                                            "Special Considerations",
                                             "Always Medevac")),
     # Factor practice location with Referral Hub as reference
     practice_location = factor(practice_location, 
@@ -493,12 +492,12 @@ vignette_desc <- data %>%
     # Reclassify D as B first
     vignette_class = ifelse(vignette_class == "D", "B", vignette_class),
     vignette_type = case_when(
-      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac Only",
-      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial Only",
-      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain Only",
-      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain",
-      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial",
-      vignette_class == "B" & grepl("Conflict", question_type) ~ "Medevac or Remain",
+      vignette_class == "A" & question_type == "Clear Medevac" ~ "Medevac Best Option",
+      vignette_class == "A" & question_type == "Clear Commercial" ~ "Commercial Best Option",
+      vignette_class == "A" & question_type == "Clear Remain" ~ "Remain Best Option",
+      vignette_class == "B" & question_type == "Clear Not Medevac" ~ "Commercial or Remain Best",
+      vignette_class == "B" & question_type == "Clear Not Remain" ~ "Medevac or Commercial Best",
+      vignette_class == "B" & grepl("Conflict", question_type) ~ "Special Situation: Medevac or Remain",
       vignette_class == "C" ~ "All Options Reasonable",
       TRUE ~ as.character(question_type)
     ),
@@ -593,7 +592,7 @@ vignette_desc <- vignette_desc %>%
 table2_display <- vignette_desc %>%
   # Arrange by medevac_status_label to ensure proper grouping
   arrange(factor(medevac_status_label, 
-                 levels = c("Never Medevac", "Possible Medevac", "Special Considerations", "Always Medevac")),
+                 levels = c("Never Medevac", "Possible Medevac", "Always Medevac")),
           question) %>%
   select(
     `Vignette Type` = vignette_type,
@@ -648,7 +647,7 @@ table2_kable
 
 ---
 
-## Figure 2: Agreement, Confidence, and Medevac Selection by Vignette Type
+## Figure 2: Agreement, Confidence, and Decision Distribution by Vignette Type
 
 ```{r figure2-combined-lines}
 #| fig-height: 7
@@ -664,8 +663,12 @@ vignette_summary <- data %>%
     se_agreement = sd(agreement_pct, na.rm = TRUE) / sqrt(n_distinct(question)),
     mean_confidence = mean(confidence, na.rm = TRUE),
     se_confidence = sd(confidence, na.rm = TRUE) / sqrt(n()),
-    pct_medevac = 100 * mean(chose_medevac),
-    se_medevac = 100 * sd(chose_medevac) / sqrt(n()),
+    pct_medevac = 100 * mean(decision == "Medevac"),
+    se_medevac = 100 * sd(decision == "Medevac") / sqrt(n()),
+    pct_commercial = 100 * mean(decision == "Commercial"),
+    se_commercial = 100 * sd(decision == "Commercial") / sqrt(n()),
+    pct_remain = 100 * mean(decision == "Remain"),
+    se_remain = 100 * sd(decision == "Remain") / sqrt(n()),
     .groups = "drop"
   ) %>%
   mutate(
@@ -677,6 +680,10 @@ vignette_summary <- data %>%
     agreement_upper = mean_agreement + 1.96 * se_agreement,
     medevac_lower = pct_medevac - 1.96 * se_medevac,
     medevac_upper = pct_medevac + 1.96 * se_medevac,
+    commercial_lower = pct_commercial - 1.96 * se_commercial,
+    commercial_upper = pct_commercial + 1.96 * se_commercial,
+    remain_lower = pct_remain - 1.96 * se_remain,
+    remain_upper = pct_remain + 1.96 * se_remain,
     category_num = row_number()
   )
 
@@ -685,9 +692,11 @@ plot_data <- vignette_summary %>%
   select(medevac_status_label, category_num, 
          Agreement = mean_agreement, agreement_lower, agreement_upper,
          `Confidence (scaled)` = confidence_scaled, confidence_lower, confidence_upper,
-         `Medevac Selected` = pct_medevac, medevac_lower, medevac_upper) %>%
+         `% Medevac` = pct_medevac, medevac_lower, medevac_upper,
+         `% Commercial` = pct_commercial, commercial_lower, commercial_upper,
+         `% Remain` = pct_remain, remain_lower, remain_upper) %>%
   pivot_longer(
-    cols = c(Agreement, `Confidence (scaled)`, `Medevac Selected`),
+    cols = c(Agreement, `Confidence (scaled)`, `% Medevac`, `% Commercial`, `% Remain`),
     names_to = "Metric",
     values_to = "Value"
   ) %>%
@@ -695,16 +704,21 @@ plot_data <- vignette_summary %>%
     Lower = case_when(
       Metric == "Agreement" ~ agreement_lower,
       Metric == "Confidence (scaled)" ~ confidence_lower,
-      Metric == "Medevac Selected" ~ medevac_lower
+      Metric == "% Medevac" ~ medevac_lower,
+      Metric == "% Commercial" ~ commercial_lower,
+      Metric == "% Remain" ~ remain_lower
     ),
     Upper = case_when(
       Metric == "Agreement" ~ agreement_upper,
       Metric == "Confidence (scaled)" ~ confidence_upper,
-      Metric == "Medevac Selected" ~ medevac_upper
-    )
+      Metric == "% Medevac" ~ medevac_upper,
+      Metric == "% Commercial" ~ commercial_upper,
+      Metric == "% Remain" ~ remain_upper
+    ),
+    LineType = ifelse(Metric %in% c("Agreement", "Confidence (scaled)"), "solid", "dashed")
   )
 
-ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metric)) +
+ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metric, linetype = LineType)) +
   geom_line(size = 1.5) +
   geom_point(size = 4) +
   geom_errorbar(aes(ymin = Lower, ymax = Upper), 
@@ -712,18 +726,21 @@ ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metri
   scale_color_manual(
     values = c("Agreement" = "#3498DB",
                "Confidence (scaled)" = "#E67E22",
-               "Medevac Selected" = "#27AE60"),
+               "% Medevac" = "#27AE60",
+               "% Commercial" = "#9B59B6",
+               "% Remain" = "#E74C3C"),
     name = NULL
   ) +
+  scale_linetype_identity() +
   labs(
-    title = "Figure 2: Agreement, Confidence, and Medevac Selection by Vignette Type",
+    title = "Figure 2: Agreement, Confidence, and Decision Distribution by Vignette Type",
     subtitle = "Note: Confidence rescaled to 0-100 scale for comparison (original 1-10 scale × 10)",
     x = "Vignette Type",
     y = "Percentage / Scaled Score"
   ) +
   scale_x_continuous(
-    breaks = 1:4,
-    labels = c("Never\nMedevac", "Possible\nMedevac", "Special\nConsiderations", "Always\nMedevac")
+    breaks = 1:3,
+    labels = c("Never\nMedevac", "Possible\nMedevac", "Always\nMedevac")
   ) +
   scale_y_continuous(limits = c(0, 105), breaks = seq(0, 100, 20)) +
   theme_minimal(base_size = 13) +
@@ -739,9 +756,12 @@ ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metri
 ```
 
 **Key Patterns:**
-- **Agreement** (blue): Higher on clear-cut cases (Always/Never Medevac)
-- **Confidence** (orange, scaled): Highest when medevac is clearly indicated (Always Medevac)
-- **Medevac Selection** (green): Strong gradient from Never (0%) to Always (100%)
+- **Agreement** (blue, solid): Higher on clear-cut cases (Always/Never Medevac)
+- **Confidence** (orange, solid): Highest when medevac is clearly indicated (Always Medevac)
+- **Decision patterns** (dashed lines):
+  - **% Medevac** (green): Strong gradient from Never (0%) to Always (100%)
+  - **% Commercial** (purple): Higher for intermediate scenarios
+  - **% Remain** (red): Higher when medevac is not indicated
 - Error bars show 95% confidence intervals
 
 ---
@@ -780,7 +800,6 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
   scale_color_manual(
     values = c("Never Medevac" = "#E74C3C",
                "Possible Medevac" = "#95A5A6",
-               "Special Considerations" = "#F39C12",
                "Always Medevac" = "#27AE60"),
     name = "Vignette Type"
   ) +
@@ -810,97 +829,6 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
 
 - **Correlation**: `r ifelse(cor_pearson$p.value < 0.05, sprintf("Significant positive correlation (r = %.2f, p = %.3f)", cor_pearson$estimate, cor_pearson$p.value), sprintf("No significant correlation (r = %.2f, p = %.2f)", cor_pearson$estimate, cor_pearson$p.value))`
 - **Interpretation**: `r ifelse(cor_pearson$estimate > 0.3 & cor_pearson$p.value < 0.05, "Physicians are more confident on vignettes with higher agreement, suggesting appropriate calibration.", ifelse(abs(cor_pearson$estimate) < 0.3, "Confidence levels are relatively independent of agreement, suggesting physicians maintain consistent confidence across vignettes.", "Unexpected pattern warrants further investigation."))`
-
----
-
-## Figure 4: Medevac Utilization Rates by Vignette Type
-
-```{r figure4-marginal-probs}
-#| fig-height: 6
-#| fig-width: 10
-
-# This figure is computed from model results but shown here for visual flow
-# Model is defined in the Primary Analysis section below
-
-# We'll compute this after the model, but display it here
-# Use a placeholder approach by computing inline
-
-# Quick model for this figure (will be same as primary model below)
-# Using within-between confidence decomposition
-model_for_fig4 <- glmer(chose_medevac ~ medevac_status_label + 
-                  confidence_within +
-                  confidence_between +
-                  years_experience_centered +
-                  practice_location +
-                  (1 | physician_id) + (1 | question),
-                data = data,
-                family = binomial(link = "logit"),
-                control = glmerControl(optimizer = "bobyqa"))
-
-# Get fixed effects
-fixed_effects_fig4 <- fixef(model_for_fig4)
-vcov_mat_fig4 <- vcov(model_for_fig4)
-
-# Calculate marginal predicted probabilities with standard errors
-categories <- c("Never Medevac",
-               "Possible Medevac",
-               "Special Considerations",
-               "Always Medevac")
-
-# Calculate predicted log-odds and standard errors for each category
-pred_logodds <- c(
-  fixed_effects_fig4[1],  # Never Medevac (reference)
-  fixed_effects_fig4[1] + fixed_effects_fig4[2],  # Possible Medevac
-  fixed_effects_fig4[1] + fixed_effects_fig4[3],  # Special Considerations
-  fixed_effects_fig4[1] + fixed_effects_fig4[4]   # Always Medevac
-)
-
-# Calculate standard errors using delta method
-se_logodds <- c(
-  sqrt(vcov_mat_fig4[1,1]),
-  sqrt(vcov_mat_fig4[1,1] + vcov_mat_fig4[2,2] + 2*vcov_mat_fig4[1,2]),
-  sqrt(vcov_mat_fig4[1,1] + vcov_mat_fig4[3,3] + 2*vcov_mat_fig4[1,3]),
-  sqrt(vcov_mat_fig4[1,1] + vcov_mat_fig4[4,4] + 2*vcov_mat_fig4[1,4])
-)
-
-# Calculate 95% CI on log-odds scale
-logodds_lower <- pred_logodds - 1.96 * se_logodds
-logodds_upper <- pred_logodds + 1.96 * se_logodds
-
-# Transform to probability scale
-marginal_plot_data <- data.frame(
-  category = factor(categories, levels = categories),
-  category_num = 1:4,
-  predicted = plogis(pred_logodds),
-  lower = plogis(logodds_lower),
-  upper = plogis(logodds_upper)
-)
-
-ggplot(marginal_plot_data, aes(x = category_num, y = predicted)) +
-  geom_line(color = "#3498DB", size = 1.5) +
-  geom_point(color = "#3498DB", size = 4) +
-  geom_errorbar(aes(ymin = lower, ymax = upper), 
-                width = 0.15, size = 1, color = "#2C3E50") +
-  geom_text(aes(label = sprintf("%.1f%%", predicted * 100)),
-            vjust = -1.5, size = 4, fontface = "bold") +
-  labs(
-    title = "Figure 4: Medevac Utilization Rates by Vignette Type",
-    subtitle = "Model-estimated probability of choosing medevac by vignette type (with 95% CI)",
-    x = "Vignette Type",
-    y = "Predicted Probability of Choosing Medevac"
-  ) +
-  scale_x_continuous(breaks = 1:4, labels = categories) +
-  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1.08), breaks = seq(0, 1, 0.2)) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-    axis.text.y = element_text(size = 10),
-    panel.grid.minor = element_blank()
-  )
-```
 
 ---
 
@@ -943,6 +871,10 @@ or_upper <- exp(fixed_effects + 1.96 * se)
 ```
 
 **Note:** Confidence is decomposed into within-person (deviation from own average) and between-person (overall confidence level) effects using the within-between decomposition approach. This separates the effect of "being more confident than usual on this vignette" from "being a generally confident physician."
+
+**Why Generalized Linear Mixed Models (GLMM)?**
+
+We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses from the same physician are more similar to each other than to responses from other physicians, and responses to the same vignette are correlated across physicians. The GLMM approach includes random intercepts for both physicians and vignettes, allowing us to: (1) obtain valid standard errors and p-values that account for clustering, (2) separate within-physician effects (e.g., being more confident than usual) from between-physician effects (e.g., generally confident physicians), and (3) quantify how much variation exists at the physician vs. vignette level beyond what's explained by our measured predictors.
 
 ## Table 3: Model Results - All Fixed Effects
 
@@ -1068,31 +1000,21 @@ kable(variance_table,
 - **Physician MOR**: `r sprintf("%.2f", mor_physician)` (95% CI: 1.00 - 2.26) - Two randomly selected physicians differ by at most this odds ratio
 - **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` (95% CI: 3.29 - 26.74) - Two randomly selected vignettes differ by at most this odds ratio
 
-The small physician ICC and MOR indicate that physicians are relatively consistent with each other, while the larger vignette variance reflects meaningful differences in how clear-cut the clinical indication for medevac is across different scenarios.
+**Key Drivers of Medevac Utilization:**
 
-### Interpreting Variance Components in Context
+- **Clinical scenario is the primary driver**: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for "Always Medevac" scenarios have `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))` times the odds compared to "Never Medevac" scenarios (OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`, 95% CI: `r sprintf("%.0f-%.0f", exp(confint(model_primary)["medevac_status_labelAlways Medevac", 1]), exp(confint(model_primary)["medevac_status_labelAlways Medevac", 2]))`, p < 0.001), demonstrating that clinical appropriateness dominates decision-making.
 
-The median odds ratio (MOR) translates variance components into the odds ratio scale, enabling direct comparison with fixed effects (Merlo et al., 2006). This comparison reveals important insights:
+- **Physician confidence influences decisions**: Higher confidence on individual cases increases likelihood of medevac utilization (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))` per 1-point increase compared to physician's average, 95% CI: `r sprintf("%.2f-%.2f", exp(confint(model_primary)["confidence_within", 1]), exp(confint(model_primary)["confidence_within", 2]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["confidence_within", "Pr(>|z|)"])`).
 
-**1. Vignette Classification Performance:**
-The fixed effect of vignette type (Always vs Never Medevac: OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`) is orders of magnitude larger than the residual vignette MOR (`r sprintf("%.2f", mor_vignette)`). This 943:1 ratio indicates that our clinical appropriateness classification captures approximately 99.9% of vignette-to-vignette variation, with only modest within-category heterogeneity remaining.
+- **Practice location matters**: Mixed practice experience (both regional and referral hubs) is associated with higher medevac utilization compared to referral hub only practice (OR = `r sprintf("%.2f", exp(fixed_effects["practice_locationMixed"]))`, 95% CI: `r sprintf("%.2f-%.2f", exp(confint(model_primary)["practice_locationMixed", 1]), exp(confint(model_primary)["practice_locationMixed", 2]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["practice_locationMixed", "Pr(>|z|)"])`).
 
-**2. Confidence Effects Relative to Physician Heterogeneity:**
-The within-person confidence effect (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))`) is nearly identical in magnitude to the physician MOR (`r sprintf("%.2f", mor_physician)`). This indicates that the effect of being one point more confident than usual is comparable to the entire range of unmeasured physician differences. In other words, confidence fluctuations explain variation equivalent to all other physician-level characteristics (potentially including risk tolerance, practice philosophy, or training background) combined.
-
-**3. Sources of Remaining Physician Variation:**
-After accounting for years of practice, practice location, and baseline confidence levels, the residual physician variation (MOR = `r sprintf("%.2f", mor_physician)`, 95% CI: 1.00-2.26) is small but non-zero. This remaining variation may reflect unmeasured individual differences such as risk tolerance, practice philosophy, or other physician-level characteristics not captured by our measured predictors. The small magnitude suggests physicians are relatively homogeneous in their medevac propensity.
-
-**4. Clinical Context Dominates Individual Differences:**
-The vignette MOR (`r sprintf("%.2f", mor_vignette)`) substantially exceeds the physician MOR (`r sprintf("%.2f", mor_physician)`) by a factor of 5.2, indicating that **which case a physician encounters matters far more than which physician is making the decision**. This pattern—combined with the dominant fixed effect of vignette type—demonstrates that medevac decisions are driven primarily by appropriate clinical reasoning rather than systematic individual biases.
-
-**Reference:** Merlo J, Chaix B, Ohlsson H, et al. A brief conceptual tutorial of multilevel analysis in social epidemiology: using measures of clustering in multilevel logistic regression to investigate contextual phenomena. *J Epidemiol Community Health.* 2006;60(4):290-297.
+- **Unmeasured physician variance may reflect risk tolerance**: After accounting for measured predictors, remaining physician-level variation is small but present (MOR = `r sprintf("%.2f", mor_physician)`, 95% CI: 1.00-2.26; ICC = `r sprintf("%.1f%%", 100*icc_physician)`). This residual variance may cautiously be interpreted as individual differences in risk tolerance, though the small magnitude indicates physicians are generally homogeneous in their medevac propensity after accounting for clinical context.
 
 ---
 
-## Figure 5: Appropriateness Calibration by Physician
+## Figure 4: Appropriateness Calibration by Physician
 
-```{r figure5-calibration}
+```{r figure4-calibration}
 #| fig-height: 10
 #| fig-width: 12
 
@@ -1131,7 +1053,7 @@ ggplot(physician_calibration, aes(x = prob_never, y = prob_always, color = years
            label = "Good discrimination\n(above diagonal)", 
            size = 4, fontface = "bold", color = "#27AE60") +
   labs(
-    title = "Figure 5: Physician Appropriateness Calibration",
+    title = "Figure 4: Physician Appropriateness Calibration",
     subtitle = "Medevac propensity when 'Never Medevac' vs. 'Always Medevac' (colored by experience)",
     x = "Predicted Prob. When Never Medevac",
     y = "Predicted Prob. When Always Medevac"
