@@ -14,8 +14,8 @@ question,question_type,medevac_normative_status,medevac_status_label
 13,Clear Medevac,medevac_only_correct,Always Medevac
 14,Clear Not Medevac,medevac_only_wrong,Never Medevac
 15,Clear Commercial,medevac_one_of_two_wrong,Possible Medevac
-16,Conflict Between Physiology/Logistics,medevac_or_remain,Special Considerations
-17,Conflict Between Physiology/Logistics,medevac_or_remain,Special Considerations
-18,Conflict Between Physiology/Logistics,medevac_or_remain,Special Considerations
+16,Conflict Between Physiology/Logistics,medevac_or_remain,Possible Medevac
+17,Conflict Between Physiology/Logistics,medevac_or_remain,Possible Medevac
+18,Conflict Between Physiology/Logistics,medevac_or_remain,Possible Medevac
 19,Clear Medevac,medevac_only_correct,Always Medevac
 20,Any Option,ambiguous_all_plausible,Possible Medevac
