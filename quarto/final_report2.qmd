@@ -83,10 +83,11 @@ data <- data %>%
   mutate(
     # Primary outcome: chose medevac vs. not
     chose_medevac = ifelse(decision == "Medevac", 1, 0),
-    # Set factor levels with Possible Medevac as reference (3 categories)
+    # Set factor levels with Possible Medevac as reference (4 categories)
     medevac_status_label = factor(medevac_status_label,
                                    levels = c("Possible Medevac",
                                             "Never Medevac",
+                                            "Special Considerations",
                                             "Always Medevac")),
     # Factor practice location with Referral Hub as reference
     practice_location = factor(practice_location, 
@@ -592,7 +593,7 @@ vignette_desc <- vignette_desc %>%
 table2_display <- vignette_desc %>%
   # Arrange by medevac_status_label to ensure proper grouping
   arrange(factor(medevac_status_label, 
-                 levels = c("Never Medevac", "Possible Medevac", "Always Medevac")),
+                 levels = c("Never Medevac", "Possible Medevac", "Special Considerations", "Always Medevac")),
           question) %>%
   select(
     `Vignette Type` = vignette_type,
@@ -739,8 +740,8 @@ ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metri
     y = "Percentage / Scaled Score"
   ) +
   scale_x_continuous(
-    breaks = 1:3,
-    labels = c("Never\nMedevac", "Possible\nMedevac", "Always\nMedevac")
+    breaks = 1:4,
+    labels = c("Never\nMedevac", "Possible\nMedevac", "Special\nConsiderations", "Always\nMedevac")
   ) +
   scale_y_continuous(limits = c(0, 105), breaks = seq(0, 100, 20)) +
   theme_minimal(base_size = 13) +
@@ -800,6 +801,7 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
   scale_color_manual(
     values = c("Never Medevac" = "#E74C3C",
                "Possible Medevac" = "#95A5A6",
+               "Special Considerations" = "#F39C12",
                "Always Medevac" = "#27AE60"),
     name = "Vignette Type"
   ) +
@@ -894,6 +896,7 @@ fixed_table <- data.frame(
     "**Vignette Type**",
     "  Possible Medevac (reference)",
     "  Never Medevac",
+    "  Special Considerations",
     "  Always Medevac",
     "",
     "**Physician Characteristics**",
@@ -907,10 +910,10 @@ fixed_table <- data.frame(
     "**Decision Characteristics**",
     "  Confidence (compared to average response for each physician)"
   ),
-  OR = c(NA, 1.00, or[2:3], NA, NA, or[6], or[5], NA, 1.00, or[7], or[8], NA, NA, or[4]),
-  CI_lower = c(NA, NA, or_lower[2:3], NA, NA, or_lower[6], or_lower[5], NA, NA, or_lower[7], or_lower[8], NA, NA, or_lower[4]),
-  CI_upper = c(NA, NA, or_upper[2:3], NA, NA, or_upper[6], or_upper[5], NA, NA, or_upper[7], or_upper[8], NA, NA, or_upper[4]),
-  p_value_raw = c(NA, NA, p_values[2:3], NA, NA, p_values[6], p_values[5], NA, NA, p_values[7], p_values[8], NA, NA, p_values[4])
+  OR = c(NA, 1.00, or[2:4], NA, NA, or[7], or[6], NA, 1.00, or[8], or[9], NA, NA, or[5]),
+  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[7], or_lower[6], NA, NA, or_lower[8], or_lower[9], NA, NA, or_lower[5]),
+  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[7], or_upper[6], NA, NA, or_upper[8], or_upper[9], NA, NA, or_upper[5]),
+  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[7], p_values[6], NA, NA, p_values[8], p_values[9], NA, NA, p_values[5])
 ) %>%
   mutate(
     OR_display = case_when(
@@ -955,15 +958,16 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 **Significant Predictors (p < 0.05):**
 
 - **Vignette Type**: Compared to Possible Medevac (reference):
-  - Never Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001) - 95% lower odds
-  - Always Medevac: OR = `r sprintf("%.2f", or[3])` (p < 0.001) - Much higher odds
-- **Within-Person Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual increases medevac likelihood
+  - Never Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001) - Much lower odds
+  - Special Considerations: OR = `r sprintf("%.2f", or[3])` (p = `r ifelse(p_values[3] < 0.05, ifelse(p_values[3] < 0.001, "<0.001", sprintf("%.3f", p_values[3])), sprintf("%.3f", p_values[3]))`)
+  - Always Medevac: OR = `r sprintf("%.2f", or[4])` (p < 0.001) - Much higher odds
+- **Within-Person Confidence**: OR = `r sprintf("%.2f", or[5])` per 1-point increase (p = `r ifelse(p_values[5] < 0.001, "<0.001", sprintf("%.3f", p_values[5]))`) - Being more confident than usual increases medevac likelihood
 
 **Non-Significant Predictors (p ≥ 0.05):**
 
-- **Between-Person Confidence**: OR = `r sprintf("%.2f", or[5])` (p = `r sprintf("%.3f", p_values[5])`) - Overall confidence level not associated with medevac propensity
-- **Years of Experience**: OR = `r sprintf("%.2f", or[6])` per year (p = `r sprintf("%.3f", p_values[6])`) - Experience not significantly associated with utilization
-- **Practice Location**: Regional Hub OR = `r sprintf("%.2f", or[7])` (p = `r sprintf("%.3f", p_values[7])`); Mixed OR = `r sprintf("%.2f", or[8])` (p = `r sprintf("%.3f", p_values[8])`) - No significant location effects
+- **Between-Person Confidence**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Overall confidence level not associated with medevac propensity
+- **Years of Experience**: OR = `r sprintf("%.2f", or[7])` per year (p = `r sprintf("%.3f", p_values[7])`) - Experience not significantly associated with utilization
+- **Practice Location**: Regional Hub OR = `r sprintf("%.2f", or[8])` (p = `r sprintf("%.3f", p_values[8])`); Mixed OR = `r sprintf("%.2f", or[9])` (p = `r sprintf("%.3f", p_values[9])`) - No significant location effects
 
 ---
 
