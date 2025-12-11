@@ -955,8 +955,16 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 
 **Interpretation:**
 
-- **Confidence**: OR = `r sprintf("%.2f", or[6])` per 1-point increase (p = `r ifelse(p_values[6] < 0.001, "<0.001", sprintf("%.3f", p_values[6]))`)
-- **Experience**: OR = `r sprintf("%.2f", or[7])` per 1-year increase (p = `r ifelse(p_values[7] < 0.001, "<0.001", sprintf("%.3f", p_values[7]))`)
+**Significant Predictors (p < 0.05):**
+
+- **Vignette Type**: Strong gradient from Never to Always Medevac (all comparisons p < 0.001)
+- **Within-Person Confidence**: OR = `r sprintf("%.2f", or[5])` per 1-point increase (p = `r ifelse(p_values[5] < 0.001, "<0.001", sprintf("%.3f", p_values[5]))`) - Being more confident than usual increases medevac likelihood
+
+**Non-Significant Predictors (p ≥ 0.05):**
+
+- **Between-Person Confidence**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Overall confidence level not associated with medevac propensity
+- **Years of Experience**: OR = `r sprintf("%.2f", or[7])` per year (p = `r sprintf("%.3f", p_values[7])`) - Experience not significantly associated with utilization
+- **Practice Location**: Regional Hub OR = `r sprintf("%.2f", or[8])` (p = `r sprintf("%.3f", p_values[8])`); Mixed OR = `r sprintf("%.2f", or[9])` (p = `r sprintf("%.3f", p_values[9])`) - No significant location effects
 
 ---
 
