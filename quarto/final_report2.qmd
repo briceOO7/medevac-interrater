@@ -842,14 +842,26 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
 # Check correlation between experience and confidence
 cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs")
 
+# Exclude Special Considerations from model (sensitivity analysis)
+data_model <- data %>%
+  filter(medevac_status_label != "Special Considerations") %>%
+  mutate(
+    # Re-level factor to drop unused level
+    medevac_status_label = factor(medevac_status_label,
+                                   levels = c("Possible Medevac",
+                                            "Never Medevac",
+                                            "Always Medevac"))
+  )
+
 # Primary model: vignette type + confidence (within/between) + experience + practice location
+# Note: Excludes Special Considerations vignettes (n=3) as sensitivity analysis
 model_primary <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_within +
                   confidence_between +
                   years_experience_centered +
                   practice_location +
                   (1 | physician_id) + (1 | question),
-                data = data,
+                data = data_model,
                 family = binomial(link = "logit"),
                 control = glmerControl(optimizer = "bobyqa"))
 
@@ -893,10 +905,9 @@ p_values <- 2 * (1 - pnorm(abs(z_scores)))
 
 fixed_table <- data.frame(
   Predictor = c(
-    "**Vignette Type**",
+    "**Vignette Type** (excludes Special Considerations)",
     "  Possible Medevac (reference)",
     "  Never Medevac",
-    "  Special Considerations",
     "  Always Medevac",
     "",
     "**Physician Characteristics**",
@@ -910,26 +921,26 @@ fixed_table <- data.frame(
     "**Decision Characteristics**",
     "  Confidence (compared to average response for each physician)"
   ),
-  OR = c(NA, 1.00, or[2:4], NA, NA, or[7], or[6], NA, 1.00, or[8], or[9], NA, NA, or[5]),
-  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[7], or_lower[6], NA, NA, or_lower[8], or_lower[9], NA, NA, or_lower[5]),
-  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[7], or_upper[6], NA, NA, or_upper[8], or_upper[9], NA, NA, or_upper[5]),
-  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[7], p_values[6], NA, NA, p_values[8], p_values[9], NA, NA, p_values[5])
+  OR = c(NA, 1.00, or[2:3], NA, NA, or[6], or[5], NA, 1.00, or[7], or[8], NA, NA, or[4]),
+  CI_lower = c(NA, NA, or_lower[2:3], NA, NA, or_lower[6], or_lower[5], NA, NA, or_lower[7], or_lower[8], NA, NA, or_lower[4]),
+  CI_upper = c(NA, NA, or_upper[2:3], NA, NA, or_upper[6], or_upper[5], NA, NA, or_upper[7], or_upper[8], NA, NA, or_upper[4]),
+  p_value_raw = c(NA, NA, p_values[2:3], NA, NA, p_values[6], p_values[5], NA, NA, p_values[7], p_values[8], NA, NA, p_values[4])
 ) %>%
   mutate(
     OR_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
+      Predictor %in% c("**Vignette Type** (excludes Special Considerations)", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
       Predictor %in% c("  Possible Medevac (reference)", "    Referral Hub (reference)") ~ "1.00",
       !is.na(OR) ~ sprintf("%.2f", OR),
       TRUE ~ ""
     ),
     CI_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
+      Predictor %in% c("**Vignette Type** (excludes Special Considerations)", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
       Predictor %in% c("  Possible Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
     ),
     p_display = case_when(
-      Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
+      Predictor %in% c("**Vignette Type** (excludes Special Considerations)", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
       Predictor %in% c("  Possible Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
       is.na(p_value_raw) ~ "",
       p_value_raw < 0.001 ~ "<0.001*",
@@ -955,19 +966,20 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 
 **Interpretation:**
 
+**Note:** Special Considerations vignettes (Q16, Q17, Q18) excluded from model as sensitivity analysis. Model includes only clear Never (n=4), Possible (n=11), and Always (n=5) categories.
+
 **Significant Predictors (p < 0.05):**
 
 - **Vignette Type**: Compared to Possible Medevac (reference):
   - Never Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001) - Much lower odds
-  - Special Considerations: OR = `r sprintf("%.2f", or[3])` (p = `r ifelse(p_values[3] < 0.05, ifelse(p_values[3] < 0.001, "<0.001", sprintf("%.3f", p_values[3])), sprintf("%.3f", p_values[3]))`)
-  - Always Medevac: OR = `r sprintf("%.2f", or[4])` (p < 0.001) - Much higher odds
-- **Within-Person Confidence**: OR = `r sprintf("%.2f", or[5])` per 1-point increase (p = `r ifelse(p_values[5] < 0.001, "<0.001", sprintf("%.3f", p_values[5]))`) - Being more confident than usual increases medevac likelihood
+  - Always Medevac: OR = `r sprintf("%.2f", or[3])` (p < 0.001) - Much higher odds
+- **Within-Person Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual increases medevac likelihood
 
 **Non-Significant Predictors (p ≥ 0.05):**
 
-- **Between-Person Confidence**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Overall confidence level not associated with medevac propensity
-- **Years of Experience**: OR = `r sprintf("%.2f", or[7])` per year (p = `r sprintf("%.3f", p_values[7])`) - Experience not significantly associated with utilization
-- **Practice Location**: Regional Hub OR = `r sprintf("%.2f", or[8])` (p = `r sprintf("%.3f", p_values[8])`); Mixed OR = `r sprintf("%.2f", or[9])` (p = `r sprintf("%.3f", p_values[9])`) - No significant location effects
+- **Between-Person Confidence**: OR = `r sprintf("%.2f", or[5])` (p = `r sprintf("%.3f", p_values[5])`) - Overall confidence level not associated with medevac propensity
+- **Years of Experience**: OR = `r sprintf("%.2f", or[6])` per year (p = `r sprintf("%.3f", p_values[6])`) - Experience not significantly associated with utilization
+- **Practice Location**: Regional Hub OR = `r sprintf("%.2f", or[7])` (p = `r sprintf("%.3f", p_values[7])`); Mixed OR = `r sprintf("%.2f", or[8])` (p = `r sprintf("%.3f", p_values[8])`) - No significant location effects
 
 ---
 
