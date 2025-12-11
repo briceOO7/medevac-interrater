@@ -870,6 +870,12 @@ se <- sqrt(diag(vcov(model_primary)))
 or <- exp(fixed_effects)
 or_lower <- exp(fixed_effects - 1.96 * se)
 or_upper <- exp(fixed_effects + 1.96 * se)
+
+# Store specific CIs for inline text (avoids repeated confint() calls)
+ci_always_medevac <- c(or_lower["medevac_status_labelAlways Medevac"], 
+                       or_upper["medevac_status_labelAlways Medevac"])
+ci_conf_within <- c(or_lower["confidence_within"], or_upper["confidence_within"])
+ci_mixed_location <- c(or_lower["practice_locationMixed"], or_upper["practice_locationMixed"])
 ```
 
 **Note:** Confidence is decomposed into within-person (deviation from own average) and between-person (overall confidence level) effects using the within-between decomposition approach. This separates the effect of "being more confident than usual on this vignette" from "being a generally confident physician."
@@ -1004,13 +1010,13 @@ kable(variance_table,
 
 **Key Drivers of Medevac Utilization:**
 
-- **Clinical scenario is the primary driver**: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for "Always Medevac" scenarios have `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))` times the odds compared to "Never Medevac" scenarios (OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`, 95% CI: `r sprintf("%.0f-%.0f", exp(confint(model_primary)["medevac_status_labelAlways Medevac", 1]), exp(confint(model_primary)["medevac_status_labelAlways Medevac", 2]))`, p < 0.001), demonstrating that clinical appropriateness dominates decision-making.
+- **Clinical scenario is the primary driver**: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for "Always Medevac" scenarios have `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))` times the odds compared to "Never Medevac" scenarios (OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`, 95% CI: `r sprintf("%.0f-%.0f", ci_always_medevac[1], ci_always_medevac[2])`, p < 0.001), demonstrating that clinical appropriateness dominates decision-making.
 
-- **Physician confidence influences decisions**: Higher confidence on individual cases increases likelihood of medevac utilization (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))` per 1-point increase compared to physician's average, 95% CI: `r sprintf("%.2f-%.2f", exp(confint(model_primary)["confidence_within", 1]), exp(confint(model_primary)["confidence_within", 2]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["confidence_within", "Pr(>|z|)"])`).
+- **Physician confidence influences decisions**: Higher confidence on individual cases increases likelihood of medevac utilization (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))` per 1-point increase compared to physician's average, 95% CI: `r sprintf("%.2f-%.2f", ci_conf_within[1], ci_conf_within[2])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["confidence_within", "Pr(>|z|)"])`).
 
-- **Practice location matters**: Mixed practice experience (both regional and referral hubs) is associated with higher medevac utilization compared to referral hub only practice (OR = `r sprintf("%.2f", exp(fixed_effects["practice_locationMixed"]))`, 95% CI: `r sprintf("%.2f-%.2f", exp(confint(model_primary)["practice_locationMixed", 1]), exp(confint(model_primary)["practice_locationMixed", 2]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["practice_locationMixed", "Pr(>|z|)"])`).
+- **Practice location matters**: Mixed practice experience (both regional and referral hubs) is associated with higher medevac utilization compared to referral hub only practice (OR = `r sprintf("%.2f", exp(fixed_effects["practice_locationMixed"]))`, 95% CI: `r sprintf("%.2f-%.2f", ci_mixed_location[1], ci_mixed_location[2])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["practice_locationMixed", "Pr(>|z|)"])`).
 
-- **Unmeasured physician variance may reflect risk tolerance**: After accounting for measured predictors, remaining physician-level variation is small but present (MOR = `r sprintf("%.2f", mor_physician)`, 95% CI: 1.00-2.26; ICC = `r sprintf("%.1f%%", 100*icc_physician)`). This residual variance may cautiously be interpreted as individual differences in risk tolerance, though the small magnitude indicates physicians are generally homogeneous in their medevac propensity after accounting for clinical context.
+- **Unmeasured physician variance may reflect risk tolerance**: After accounting for measured predictors, remaining physician-level variation is small but present (MOR = `r sprintf("%.2f", mor_physician)`; ICC = `r sprintf("%.1f%%", 100*icc_physician)`). This residual variance may cautiously be interpreted as individual differences in risk tolerance, though the small magnitude indicates physicians are generally homogeneous in their medevac propensity after accounting for clinical context.
 
 ---
 
