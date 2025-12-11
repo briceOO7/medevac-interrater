@@ -2958,22 +2958,22 @@ border: 0;
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Possible Medevac (reference)</td>
+<td style="text-align: left;">Never Medevac (reference)</td>
 <td style="text-align: center;">1.00</td>
 <td style="text-align: center;">ref</td>
 <td style="text-align: center;">ref</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Never Medevac</td>
-<td style="text-align: center;">0.07</td>
-<td style="text-align: center;">(0.00 - 1.85)</td>
+<td style="text-align: left;">Possible Medevac</td>
+<td style="text-align: center;">14.38</td>
+<td style="text-align: center;">(0.54 - 381.80)</td>
 <td style="text-align: center;">0.111</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Always Medevac</td>
-<td style="text-align: center;">1056.43</td>
-<td style="text-align: center;">(15.82 - 70538.23)</td>
-<td style="text-align: center;">0.001*</td>
+<td style="text-align: center;">15193.82</td>
+<td style="text-align: center;">(105.43 - 2189668.25)</td>
+<td style="text-align: center;">&lt;0.001*</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;"></td>
@@ -3057,10 +3057,10 @@ border: 0;
 <p><strong>Note:</strong> Special Considerations vignettes (Q16, Q17, Q18) excluded from model as sensitivity analysis. Model includes only clear Never (n=4), Possible (n=11), and Always (n=5) categories.</p>
 <p><strong>Significant Predictors (p &lt; 0.05):</strong></p>
 <ul>
-<li><strong>Vignette Type</strong>: Compared to Possible Medevac (reference):
+<li><strong>Vignette Type</strong>: Compared to Never Medevac (reference):
 <ul>
-<li>Never Medevac: OR = 0.07 (p &lt; 0.001) - Much lower odds</li>
-<li>Always Medevac: OR = 1056.43 (p &lt; 0.001) - Much higher odds</li>
+<li>Possible Medevac: OR = 14.38 (p &lt; 0.001) - Higher odds compared to Never</li>
+<li>Always Medevac: OR = 15193.82 (p &lt; 0.001) - Much higher odds compared to Never</li>
 </ul></li>
 <li><strong>Within-Person Confidence</strong>: OR = 1.76 per 1-point increase (p = &lt;0.001) - Being more confident than usual increases medevac likelihood</li>
 </ul>
@@ -3138,7 +3138,7 @@ border: 0;
 </ul>
 <p><strong>Key Drivers of Medevac Utilization:</strong></p>
 <ul>
-<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have 1056 times the odds compared to “Never Medevac” scenarios (OR = 1056, 95% CI: 16-70538, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
+<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have 15194 times the odds compared to “Never Medevac” scenarios (OR = 15194, 95% CI: 105-2189668, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
 <li><p><strong>Physician confidence influences decisions</strong>: Higher confidence on individual cases increases likelihood of medevac utilization (OR = 1.76 per 1-point increase compared to physician’s average, 95% CI: 1.35-2.28, p = 0.000).</p></li>
 <li><p><strong>Practice location matters</strong>: Mixed practice experience (both regional and referral hubs) is associated with higher medevac utilization compared to referral hub only practice (OR = 0.28, 95% CI: 0.10-0.82, p = 0.020).</p></li>
 <li><p><strong>Unmeasured physician variance may reflect risk tolerance</strong>: After accounting for measured predictors, remaining physician-level variation is small but present (MOR = 1.00; ICC = 0.0%). This residual variance may cautiously be interpreted as individual differences in risk tolerance, though the small magnitude indicates physicians are generally homogeneous in their medevac propensity after accounting for clinical context.</p></li>

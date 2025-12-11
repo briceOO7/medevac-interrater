@@ -846,10 +846,10 @@ cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs"
 data_model <- data %>%
   filter(medevac_status_label != "Special Considerations") %>%
   mutate(
-    # Re-level factor to drop unused level
+    # Re-level factor with Never Medevac as reference
     medevac_status_label = factor(medevac_status_label,
-                                   levels = c("Possible Medevac",
-                                            "Never Medevac",
+                                   levels = c("Never Medevac",
+                                            "Possible Medevac",
                                             "Always Medevac"))
   )
 
@@ -906,8 +906,8 @@ p_values <- 2 * (1 - pnorm(abs(z_scores)))
 fixed_table <- data.frame(
   Predictor = c(
     "**Vignette Type** (excludes Special Considerations)",
-    "  Possible Medevac (reference)",
-    "  Never Medevac",
+    "  Never Medevac (reference)",
+    "  Possible Medevac",
     "  Always Medevac",
     "",
     "**Physician Characteristics**",
@@ -929,19 +929,19 @@ fixed_table <- data.frame(
   mutate(
     OR_display = case_when(
       Predictor %in% c("**Vignette Type** (excludes Special Considerations)", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
-      Predictor %in% c("  Possible Medevac (reference)", "    Referral Hub (reference)") ~ "1.00",
+      Predictor %in% c("  Never Medevac (reference)", "    Referral Hub (reference)") ~ "1.00",
       !is.na(OR) ~ sprintf("%.2f", OR),
       TRUE ~ ""
     ),
     CI_display = case_when(
       Predictor %in% c("**Vignette Type** (excludes Special Considerations)", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
-      Predictor %in% c("  Possible Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
+      Predictor %in% c("  Never Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
     ),
     p_display = case_when(
       Predictor %in% c("**Vignette Type** (excludes Special Considerations)", "", "**Physician Characteristics**", "**Decision Characteristics**", "  Practice Location:") ~ "",
-      Predictor %in% c("  Possible Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
+      Predictor %in% c("  Never Medevac (reference)", "    Referral Hub (reference)") ~ "ref",
       is.na(p_value_raw) ~ "",
       p_value_raw < 0.001 ~ "<0.001*",
       p_value_raw < 0.05 ~ sprintf("%.3f*", p_value_raw),
@@ -970,9 +970,9 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 
 **Significant Predictors (p < 0.05):**
 
-- **Vignette Type**: Compared to Possible Medevac (reference):
-  - Never Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001) - Much lower odds
-  - Always Medevac: OR = `r sprintf("%.2f", or[3])` (p < 0.001) - Much higher odds
+- **Vignette Type**: Compared to Never Medevac (reference):
+  - Possible Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001) - Higher odds compared to Never
+  - Always Medevac: OR = `r sprintf("%.2f", or[3])` (p < 0.001) - Much higher odds compared to Never
 - **Within-Person Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual increases medevac likelihood
 
 **Non-Significant Predictors (p ≥ 0.05):**
