@@ -591,10 +591,10 @@ vignette_desc <- vignette_desc %>%
 
 # Create display table with proper ordering
 table2_display <- vignette_desc %>%
-  # Arrange by medevac_status_label to ensure proper grouping
+  # Arrange by medevac_status_label, then by agreement (descending)
   arrange(factor(medevac_status_label, 
                  levels = c("Never Medevac", "Possible Medevac", "Special Considerations", "Always Medevac")),
-          question) %>%
+          desc(agreement_pct)) %>%
   select(
     `Vignette Type` = vignette_type,
     `Q#` = question,
