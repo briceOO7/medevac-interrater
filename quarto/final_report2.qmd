@@ -964,7 +964,7 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 
 **Interpretation:**
 
-**Note:** Special Considerations vignettes (Q16, Q17, Q18) excluded from model as sensitivity analysis. Model includes only clear Never (n=4), Possible (n=11), and Always (n=5) categories.
+**Note:** Special Considerations vignettes (Q16, Q17, Q18) excluded from model as sensitivity analysis. Model includes only clear Never (n=4 vignettes), Possible (n=9 vignettes), and Always (n=4 vignettes) categories. Total: 340 responses from 20 physicians across 17 vignettes.
 
 **Significant Predictors (p < 0.05):**
 
