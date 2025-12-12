@@ -1020,7 +1020,8 @@ kable(variance_table,
     full_width = FALSE,
     position = "left"
   ) %>%
-  footnote(general = "Note: Physician random effect captures unmeasured risk tolerance and other stable physician characteristics after accounting for case-specific confidence, years of experience, and rural practice experience.",
+  footnote(general = c("Physician random effect captures unmeasured risk tolerance and other stable physician characteristics after accounting for case-specific confidence, years of experience, and rural practice experience.",
+                       "MOR reported as point estimates; 95% confidence intervals not computed due to computational complexity of variance component estimation in GLMMs."),
            general_title = "")
 ```
 
