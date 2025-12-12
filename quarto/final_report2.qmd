@@ -674,6 +674,13 @@ vignette_summary <- data %>%
     se_remain = 100 * sd(decision == "Remain") / sqrt(n()),
     .groups = "drop"
   ) %>%
+  # Set explicit factor order to match x-axis labels
+  mutate(
+    medevac_status_label = factor(medevac_status_label,
+                                   levels = c("Never Medevac", "Possible Medevac", 
+                                            "Special Considerations", "Always Medevac"))
+  ) %>%
+  arrange(medevac_status_label) %>%
   mutate(
     # Scale confidence to 0-100 scale for comparability
     confidence_scaled = mean_confidence * 10,
@@ -687,7 +694,7 @@ vignette_summary <- data %>%
     commercial_upper = pct_commercial + 1.96 * se_commercial,
     remain_lower = pct_remain - 1.96 * se_remain,
     remain_upper = pct_remain + 1.96 * se_remain,
-    category_num = row_number()
+    category_num = row_number()  # Now correctly ordered: Never=1, Possible=2, Special=3, Always=4
   )
 
 # Reshape for plotting
