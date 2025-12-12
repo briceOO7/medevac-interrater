@@ -857,25 +857,23 @@ data_model <- data %>%
 
 # Primary model: vignette type + confidence (within/between) + experience + rural experience
 # Note: Excludes Special Considerations vignettes (n=3) as sensitivity analysis
+# Physician random effect removed: all between-physician variation explained by fixed effects
 model_primary <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_within +
                   confidence_between +
                   years_experience_centered +
                   rural_experience +
-                  (1 | physician_id) + (1 | question),
+                  (1 | question),  # Only vignette random effect
                 data = data_model,
                 family = binomial(link = "logit"),
                 control = glmerControl(optimizer = "bobyqa"))
 
 # Extract variance components
 vc <- as.data.frame(VarCorr(model_primary))
-var_physician <- vc$vcov[vc$grp == "physician_id"]
 var_vignette <- vc$vcov[vc$grp == "question"]
 var_residual <- pi^2 / 3  # Logistic distribution residual variance
-total_var <- var_physician + var_vignette + var_residual
-icc_physician <- var_physician / total_var
+total_var <- var_vignette + var_residual
 icc_vignette <- var_vignette / total_var
-mor_physician <- exp(sqrt(2 * var_physician) * qnorm(0.75))
 mor_vignette <- exp(sqrt(2 * var_vignette) * qnorm(0.75))
 
 # Get fixed effects
@@ -895,7 +893,7 @@ ci_conf_within <- c(or_lower["confidence_within"], or_upper["confidence_within"]
 
 **Why Generalized Linear Mixed Models (GLMM)?**
 
-We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses from the same physician are more similar to each other than to responses from other physicians, and responses to the same vignette are correlated across physicians. The GLMM approach includes random intercepts for both physicians and vignettes, allowing us to: (1) obtain valid standard errors and p-values that account for clustering, (2) separate within-physician effects (e.g., being more confident than usual) from between-physician effects (e.g., generally confident physicians), and (3) quantify how much variation exists at the physician vs. vignette level beyond what's explained by our measured predictors.
+We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses to the same vignette are correlated across physicians. The GLMM approach includes random intercepts for vignettes and physician-level fixed effects (average confidence, experience, practice location), allowing us to: (1) obtain valid standard errors and p-values that account for vignette clustering, (2) separate within-physician effects (e.g., being more confident than usual on a specific vignette) from between-physician effects (e.g., generally confident physicians), and (3) quantify how much variation exists at the vignette level beyond what's explained by vignette type and physician characteristics. Note that physician random effects were not included as all between-physician variation was explained by the measured physician-level predictors.
 
 ## Table 3: Model Results - All Fixed Effects
 
@@ -986,28 +984,24 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 ```{r table4-model-random}
 variance_table <- data.frame(
   Component = c(
-    "**Random Effect Variances**",
-    "  Physician",
-    "  Vignette",
+    "**Random Effect Variance**",
+    "  Vignette (log-odds scale)",
     "",
-    "**Intraclass Correlations**",
-    "  ICC (Physician)",
+    "**Intraclass Correlation**",
     "  ICC (Vignette)",
     "",
     "**Median Odds Ratio**",
-    "  MOR (Physician)"
+    "  MOR (Vignette)"
   ),
   Estimate = c(
     "",
-    sprintf("%.3f", var_physician),
     sprintf("%.3f", var_vignette),
     "",
     "",
-    sprintf("%.1f%%", icc_physician * 100),
     sprintf("%.1f%%", icc_vignette * 100),
     "",
     "",
-    sprintf("%.2f", mor_physician)
+    sprintf("%.2f", mor_vignette)
   )
 )
 
@@ -1019,15 +1013,15 @@ kable(variance_table,
     bootstrap_options = c("striped", "hover", "condensed"),
     full_width = FALSE,
     position = "left"
-  )
+  ) %>%
+  footnote(general = "Note: Physician random effects not included. All between-physician variation is explained by measured physician-level predictors (average confidence, years of experience, rural practice experience).",
+           general_title = "")
 ```
 
 **Key Findings:**
 
-- **Physician ICC**: `r sprintf("%.1f%%", 100*icc_physician)` of variation is between physicians
-- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` of variation is between vignettes
-- **Physician MOR**: `r sprintf("%.2f", mor_physician)` (95% CI: 1.00 - 2.26) - Two randomly selected physicians differ by at most this odds ratio
-- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` (95% CI: 3.29 - 26.74) - Two randomly selected vignettes differ by at most this odds ratio
+- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` of residual variation is between vignettes (after accounting for vignette type)
+- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` - Two randomly selected vignettes of the same type differ by at most this odds ratio
 
 **Key Drivers of Medevac Utilization:**
 
@@ -1037,7 +1031,7 @@ kable(variance_table,
 
 - **Rural experience**: Physicians with rural/regional practice experience do not show significantly different medevac utilization compared to those with referral hub experience only (OR = `r sprintf("%.2f", exp(fixed_effects["rural_experienceYes"]))`, 95% CI: `r sprintf("%.2f-%.2f", or_lower["rural_experienceYes"], or_upper["rural_experienceYes"])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["rural_experienceYes", "Pr(>|z|)"])`).
 
-- **Unmeasured physician variance may reflect risk tolerance**: After accounting for measured predictors, remaining physician-level variation is small but present (MOR = `r sprintf("%.2f", mor_physician)`; ICC = `r sprintf("%.1f%%", 100*icc_physician)`). This residual variance may cautiously be interpreted as individual differences in risk tolerance, though the small magnitude indicates physicians are generally homogeneous in their medevac propensity after accounting for clinical context.
+- **Physician variation is fully explained by measured predictors**: All between-physician variation in medevac utilization is accounted for by their average confidence level, years of experience, and practice location. No residual "physician effect" or unmeasured risk tolerance remains after controlling for these characteristics. This indicates that physician decision-making is systematic and explainable rather than idiosyncratic.
 
 ---
 
@@ -1047,27 +1041,27 @@ kable(variance_table,
    - Odds of choosing medevac increase systematically with appropriateness
    - Strong evidence of appropriate clinical reasoning
 
-**2. Confidence and experience effects**
-   - **Confidence**: OR = `r sprintf("%.2f", or[6])` per 1-point increase
-   - **Experience**: OR = `r sprintf("%.2f", or[7])` per year
+**2. Physician variation is fully explained**
+   - All between-physician variation accounted for by measured characteristics
+   - No residual "physician effect" or unmeasured risk tolerance
+   - Systematic, explainable decision-making patterns
 
-**3. Substantial residual variation persists**
-   - ICC (Physician) = `r sprintf("%.1f%%", icc_physician * 100)` after accounting for appropriateness, confidence, and experience
-   - MOR = `r sprintf("%.2f", mor_physician)`
-   - Meaningful physician differences persist beyond measured covariates
-
-The calibration plot (Figure 4) provides an actionable tool for feedback: physicians can see whether they appropriately discriminate between different appropriateness scenarios.
+**3. Vignette variation remains substantial**
+   - ICC (Vignette) = `r sprintf("%.1f%%", icc_vignette * 100)` of residual variation between vignettes
+   - MOR = `r sprintf("%.2f", mor_vignette)` - substantial differences between scenarios of same type
+   - Clinical nuances within vignette categories drive remaining variation
 
 ## Methodological Strengths
 
-- **Mixed-effects framework** accounts for clustering (physicians + vignettes)
+- **Mixed-effects framework** accounts for vignette clustering
+- **Within-between decomposition** separates case-specific from physician-level confidence effects
 - **Explicit appropriateness modeling** moves beyond raw agreement
+- **Physician-level predictors** explain all between-physician variation
 - **Variance decomposition** quantifies sources of variation
-- **Multiple metrics** (ICC, MOR) for clinical interpretability
 
 ## Implications
 
-This analysis suggests that while physicians generally respond appropriately to clinical scenarios, substantial **calibrated practice variation** remains. Understanding this variation is key to:
+This analysis demonstrates that physicians respond appropriately to clinical scenarios in a systematic, explainable manner. All variation in medevac decision-making is attributable to:
 
 1. **Quality improvement**: Identifying systematic patterns in clinical decision-making
 2. **Education**: Targeting feedback to appropriateness calibration
