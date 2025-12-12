@@ -851,21 +851,26 @@ ggplot(vignette_conf_agree, aes(x = agreement_pct, y = mean_confidence,
 # Check correlation between experience and confidence
 cor_exp_conf <- cor(data$years_experience, data$confidence, use = "complete.obs")
 
-# Include all vignette types including Special Considerations
+# Collapse Possible and Special Considerations for model parsimony
+# This groups scenarios where medevac is a reasonable option (but not definitive)
 data_model <- data %>%
   mutate(
-    # Re-level factor with Never Medevac as reference
-    medevac_status_label = factor(medevac_status_label,
-                                   levels = c("Never Medevac",
-                                            "Possible Medevac",
-                                            "Special Considerations",
-                                            "Always Medevac"))
+    # Collapse categories: Possible + Special → "Possible/Ambiguous"
+    vignette_type_collapsed = case_when(
+      medevac_status_label %in% c("Possible Medevac", "Special Considerations") ~ "Possible/Ambiguous",
+      medevac_status_label == "Never Medevac" ~ "Never Medevac",
+      medevac_status_label == "Always Medevac" ~ "Always Medevac"
+    ),
+    # Set Possible/Ambiguous as reference (middle ground)
+    vignette_type_collapsed = factor(vignette_type_collapsed,
+                                     levels = c("Possible/Ambiguous", "Never Medevac", "Always Medevac"))
   )
 
 # Primary model: vignette type + within-person confidence + experience + rural experience
-# Note: Includes Special Considerations vignettes to assess physician variation in ambiguous scenarios
+# Note: Possible and Special Considerations collapsed into "Possible/Ambiguous" reference category
+# This represents scenarios where medevac is defensible but not definitively indicated
 # confidence_between excluded: allows physician random effect to capture risk tolerance
-model_primary <- glmer(chose_medevac ~ medevac_status_label + 
+model_primary <- glmer(chose_medevac ~ vignette_type_collapsed + 
                   confidence_within +
                   years_experience_centered +
                   rural_experience +
@@ -914,9 +919,8 @@ p_values <- 2 * (1 - pnorm(abs(z_scores)))
 fixed_table <- data.frame(
   Predictor = c(
     "**Vignette Type**",
-    "  Never Medevac (reference)",
-    "  Possible Medevac",
-    "  Special Considerations",
+    "  Possible/Ambiguous (reference)",
+    "  Never Medevac",
     "  Always Medevac",
     "",
     "**Decision Characteristics**",
@@ -926,27 +930,27 @@ fixed_table <- data.frame(
     "  Years of Experience (per 1-year increase)",
     "  Rural Experience (vs Referral Hub only)"
   ),
-  OR = c(NA, 1.00, or[2:4], NA, NA, or[5], NA, NA, or[6], or[7]),
-  CI_lower = c(NA, NA, or_lower[2:4], NA, NA, or_lower[5], NA, NA, or_lower[6], or_lower[7]),
-  CI_upper = c(NA, NA, or_upper[2:4], NA, NA, or_upper[5], NA, NA, or_upper[6], or_upper[7]),
-  p_value_raw = c(NA, NA, p_values[2:4], NA, NA, p_values[5], NA, NA, p_values[6], p_values[7])
+  OR = c(NA, 1.00, or[2:3], NA, NA, or[4], NA, NA, or[5], or[6]),
+  CI_lower = c(NA, NA, or_lower[2:3], NA, NA, or_lower[4], NA, NA, or_lower[5], or_lower[6]),
+  CI_upper = c(NA, NA, or_upper[2:3], NA, NA, or_upper[4], NA, NA, or_upper[5], or_upper[6]),
+  p_value_raw = c(NA, NA, p_values[2:3], NA, NA, p_values[4], NA, NA, p_values[5], p_values[6])
 ) %>%
   mutate(
     OR_display = case_when(
       Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)") ~ "1.00",
+      Predictor %in% c("  Possible/Ambiguous (reference)") ~ "1.00",
       !is.na(OR) ~ sprintf("%.2f", OR),
       TRUE ~ ""
     ),
     CI_display = case_when(
       Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)") ~ "ref",
+      Predictor %in% c("  Possible/Ambiguous (reference)") ~ "ref",
       !is.na(CI_lower) & !is.na(CI_upper) ~ sprintf("(%.2f - %.2f)", CI_lower, CI_upper),
       TRUE ~ ""
     ),
     p_display = case_when(
       Predictor %in% c("**Vignette Type**", "", "**Physician Characteristics**", "**Decision Characteristics**") ~ "",
-      Predictor %in% c("  Never Medevac (reference)") ~ "ref",
+      Predictor %in% c("  Possible/Ambiguous (reference)") ~ "ref",
       is.na(p_value_raw) ~ "",
       p_value_raw < 0.001 ~ "<0.001*",
       p_value_raw < 0.05 ~ sprintf("%.3f*", p_value_raw),
@@ -971,19 +975,18 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 
 **Interpretation:**
 
-**Note:** Model includes all 20 vignettes across 4 categories: Never (n=4), Possible (n=9), Special Considerations (n=3), and Always (n=4). Total: 400 responses from 20 physicians. Special Considerations vignettes represent clinically ambiguous scenarios where medevac or remain are both defensible options.
+**Note:** Model includes all 20 vignettes collapsed into 3 categories for parsimony: Possible/Ambiguous (n=12 vignettes: Possible Medevac + Special Considerations, used as reference), Never Medevac (n=4), and Always Medevac (n=4). Total: 400 responses from 20 physicians. The Possible/Ambiguous reference category represents scenarios where medevac is defensible but not definitively indicated.
 
 **Significant Predictors (p < 0.05):**
 
-- **Vignette Type - Always Medevac**: OR = `r sprintf("%.2f", or[4])` (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Physicians are overwhelmingly more likely to choose medevac for "Always Medevac" scenarios compared to "Never Medevac" scenarios, demonstrating appropriate clinical reasoning
-- **Case-Specific Confidence**: OR = `r sprintf("%.2f", or[5])` per 1-point increase (p = `r ifelse(p_values[5] < 0.001, "<0.001", sprintf("%.3f", p_values[5]))`) - Being more confident than usual on a specific case significantly increases medevac likelihood
-- **Rural Experience**: OR = `r sprintf("%.2f", or[7])` (p = `r sprintf("%.3f", p_values[7])`) - Physicians with rural/regional practice experience are significantly less likely to choose medevac compared to those with referral hub experience only (OR = `r sprintf("%.2f", or[7])` represents `r sprintf("%.0f%%", (1-or[7])*100)` reduction), suggesting rural practice experience is associated with more conservative disposition decisions
+- **Vignette Type - Always Medevac**: OR = `r sprintf("%.2f", or[3])` (p = `r ifelse(p_values[3] < 0.001, "<0.001", sprintf("%.3f", p_values[3]))`) - Compared to Possible/Ambiguous scenarios, physicians are `r sprintf("%.0f", or[3])`× more likely to choose medevac for "Always Medevac" scenarios, demonstrating appropriate clinical reasoning
+- **Case-Specific Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual on a specific case significantly increases medevac likelihood
+- **Rural Experience**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Physicians with rural/regional practice experience are significantly less likely to choose medevac compared to those with referral hub experience only (`r sprintf("%.0f%%", (1-or[6])*100)` reduction), suggesting rural practice experience is associated with more conservative disposition decisions
 
 **Non-Significant Predictors (p ≥ 0.05):**
 
-- **Vignette Type - Possible Medevac**: OR = `r sprintf("%.2f", or[2])` (p = `r sprintf("%.3f", p_values[2])`) - Moderate increase compared to "Never Medevac", but does not reach statistical significance
-- **Vignette Type - Special Considerations**: OR = `r sprintf("%.2f", or[3])` (p = `r sprintf("%.3f", p_values[3])`) - Intermediate odds between "Possible" and "Always" categories, marginally non-significant. These ambiguous scenarios show substantial physician variation
-- **Years of Experience**: OR = `r sprintf("%.2f", or[6])` per year (p = `r sprintf("%.3f", p_values[6])`) - Years in practice not significantly associated with medevac utilization after accounting for confidence, vignette type, and practice location
+- **Vignette Type - Never Medevac**: OR = `r sprintf("%.2f", or[2])` (p = `r sprintf("%.3f", p_values[2])`) - Compared to Possible/Ambiguous scenarios, physicians are `r sprintf("%.0f%%", (1-or[2])*100)` less likely to choose medevac for "Never Medevac" scenarios. The effect is marginally non-significant (p = `r sprintf("%.3f", p_values[2])`), likely due to the very low baseline rate of inappropriate medevac choices
+- **Years of Experience**: OR = `r sprintf("%.2f", or[5])` per year (p = `r sprintf("%.3f", p_values[5])`) - Years in practice not significantly associated with medevac utilization after accounting for confidence, vignette type, and practice location
 
 ---
 

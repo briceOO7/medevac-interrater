@@ -2958,66 +2958,60 @@ border: 0;
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Never Medevac (reference)</td>
+<td style="text-align: left;">Possible/Ambiguous (reference)</td>
 <td style="text-align: center;">1.00</td>
 <td style="text-align: center;">ref</td>
 <td style="text-align: center;">ref</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Possible Medevac</td>
-<td style="text-align: center;">10.96</td>
-<td style="text-align: center;">(0.70 - 172.53)</td>
-<td style="text-align: center;">0.089</td>
+<td style="text-align: left;">Never Medevac</td>
+<td style="text-align: center;">0.07</td>
+<td style="text-align: center;">(0.00 - 1.05)</td>
+<td style="text-align: center;">0.055</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Special Considerations</td>
-<td style="text-align: center;">26.47</td>
-<td style="text-align: center;">(0.91 - 773.92)</td>
-<td style="text-align: center;">0.057</td>
-</tr>
-<tr class="odd">
 <td style="text-align: left;">Always Medevac</td>
-<td style="text-align: center;">6198.15</td>
-<td style="text-align: center;">(94.03 - 408541.13)</td>
+<td style="text-align: center;">455.53</td>
+<td style="text-align: center;">(13.40 - 15481.30)</td>
 <td style="text-align: center;">&lt;0.001*</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td style="text-align: left;">**Decision Characteristics**</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;">Confidence (per 1-point increase compared to own average)</td>
 <td style="text-align: center;">1.36</td>
 <td style="text-align: center;">(1.13 - 1.64)</td>
 <td style="text-align: center;">&lt;0.001*</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td style="text-align: left;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;">**Physician Characteristics**</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td style="text-align: left;">Years of Experience (per 1-year increase)</td>
 <td style="text-align: center;">0.99</td>
 <td style="text-align: center;">(0.94 - 1.04)</td>
-<td style="text-align: center;">0.662</td>
+<td style="text-align: center;">0.663</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;">Rural Experience (vs Referral Hub only)</td>
 <td style="text-align: center;">0.37</td>
 <td style="text-align: center;">(0.16 - 0.85)</td>
@@ -3036,18 +3030,17 @@ border: 0;
 </div>
 </div>
 <p><strong>Interpretation:</strong></p>
-<p><strong>Note:</strong> Model includes all 20 vignettes across 4 categories: Never (n=4), Possible (n=9), Special Considerations (n=3), and Always (n=4). Total: 400 responses from 20 physicians. Special Considerations vignettes represent clinically ambiguous scenarios where medevac or remain are both defensible options.</p>
+<p><strong>Note:</strong> Model includes all 20 vignettes collapsed into 3 categories for parsimony: Possible/Ambiguous (n=12 vignettes: Possible Medevac + Special Considerations, used as reference), Never Medevac (n=4), and Always Medevac (n=4). Total: 400 responses from 20 physicians. The Possible/Ambiguous reference category represents scenarios where medevac is defensible but not definitively indicated.</p>
 <p><strong>Significant Predictors (p &lt; 0.05):</strong></p>
 <ul>
-<li><strong>Vignette Type - Always Medevac</strong>: OR = 6198.15 (p = &lt;0.001) - Physicians are overwhelmingly more likely to choose medevac for “Always Medevac” scenarios compared to “Never Medevac” scenarios, demonstrating appropriate clinical reasoning</li>
+<li><strong>Vignette Type - Always Medevac</strong>: OR = 455.53 (p = &lt;0.001) - Compared to Possible/Ambiguous scenarios, physicians are 456× more likely to choose medevac for “Always Medevac” scenarios, demonstrating appropriate clinical reasoning</li>
 <li><strong>Case-Specific Confidence</strong>: OR = 1.36 per 1-point increase (p = &lt;0.001) - Being more confident than usual on a specific case significantly increases medevac likelihood</li>
-<li><strong>Rural Experience</strong>: OR = 0.37 (p = 0.019) - Physicians with rural/regional practice experience are significantly less likely to choose medevac compared to those with referral hub experience only (OR = 0.37 represents 63% reduction), suggesting rural practice experience is associated with more conservative disposition decisions</li>
+<li><strong>Rural Experience</strong>: OR = 0.37 (p = 0.019) - Physicians with rural/regional practice experience are significantly less likely to choose medevac compared to those with referral hub experience only (63% reduction), suggesting rural practice experience is associated with more conservative disposition decisions</li>
 </ul>
 <p><strong>Non-Significant Predictors (p ≥ 0.05):</strong></p>
 <ul>
-<li><strong>Vignette Type - Possible Medevac</strong>: OR = 10.96 (p = 0.089) - Moderate increase compared to “Never Medevac”, but does not reach statistical significance</li>
-<li><strong>Vignette Type - Special Considerations</strong>: OR = 26.47 (p = 0.057) - Intermediate odds between “Possible” and “Always” categories, marginally non-significant. These ambiguous scenarios show substantial physician variation</li>
-<li><strong>Years of Experience</strong>: OR = 0.99 per year (p = 0.662) - Years in practice not significantly associated with medevac utilization after accounting for confidence, vignette type, and practice location</li>
+<li><strong>Vignette Type - Never Medevac</strong>: OR = 0.07 (p = 0.055) - Compared to Possible/Ambiguous scenarios, physicians are 93% less likely to choose medevac for “Never Medevac” scenarios. The effect is marginally non-significant (p = 0.055), likely due to the very low baseline rate of inappropriate medevac choices</li>
+<li><strong>Years of Experience</strong>: OR = 0.99 per year (p = 0.663) - Years in practice not significantly associated with medevac utilization after accounting for confidence, vignette type, and practice location</li>
 </ul>
 <hr>
 </section>
@@ -3070,11 +3063,11 @@ border: 0;
 </tr>
 <tr class="even">
 <td style="text-align: left;">Physician (log-odds scale)</td>
-<td style="text-align: left;">0.289</td>
+<td style="text-align: left;">0.288</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">Vignette (log-odds scale)</td>
-<td style="text-align: left;">4.024</td>
+<td style="text-align: left;">4.101</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;"></td>
@@ -3090,7 +3083,7 @@ border: 0;
 </tr>
 <tr class="odd">
 <td style="text-align: left;">ICC (Vignette)</td>
-<td style="text-align: left;">52.9%</td>
+<td style="text-align: left;">53.4%</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;"></td>
@@ -3106,7 +3099,7 @@ border: 0;
 </tr>
 <tr class="odd">
 <td style="text-align: left;">MOR (Vignette)</td>
-<td style="text-align: left;">6.78</td>
+<td style="text-align: left;">6.90</td>
 </tr>
 </tbody><tfoot>
 <tr class="odd">
@@ -3125,15 +3118,15 @@ border: 0;
 <p><strong>Key Findings:</strong></p>
 <ul>
 <li><strong>Physician ICC</strong>: 3.8% of residual variation is between physicians (unmeasured risk tolerance)</li>
-<li><strong>Vignette ICC</strong>: 52.9% of residual variation is between vignettes</li>
+<li><strong>Vignette ICC</strong>: 53.4% of residual variation is between vignettes</li>
 <li><strong>Physician MOR</strong>: 1.67 - Two randomly selected physicians differ by at most this odds ratio in unmeasured risk tolerance</li>
-<li><strong>Vignette MOR</strong>: 6.78 - Two randomly selected vignettes differ by at most this odds ratio</li>
+<li><strong>Vignette MOR</strong>: 6.90 - Two randomly selected vignettes differ by at most this odds ratio</li>
 </ul>
 <p><strong>Key Drivers of Medevac Utilization:</strong></p>
 <ul>
-<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have 6198 times the odds compared to “Never Medevac” scenarios (OR = 6198, 95% CI: 94-408541, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
+<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have NA times the odds compared to “Never Medevac” scenarios (OR = NA, 95% CI: NA-NA, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
 <li><p><strong>Case-specific confidence influences decisions</strong>: Higher confidence on individual cases increases likelihood of medevac utilization (OR = 1.36 per 1-point increase compared to physician’s average, 95% CI: 1.13-1.64, p = 0.001). This represents the effect of feeling unusually confident on a specific case, independent of general confidence level.</p></li>
-<li><p><strong>Rural experience and years of practice</strong>: Neither rural/regional practice experience (OR = 0.37, p = 0.019) nor years of experience (OR = 0.99, p = 0.662) show significant associations with medevac utilization after accounting for case-specific confidence and vignette type.</p></li>
+<li><p><strong>Rural experience and years of practice</strong>: Neither rural/regional practice experience (OR = 0.37, p = 0.019) nor years of experience (OR = 0.99, p = 0.663) show significant associations with medevac utilization after accounting for case-specific confidence and vignette type.</p></li>
 <li><p><strong>Unmeasured physician variance reflects risk tolerance</strong>: After accounting for case-specific confidence, experience, and practice location, modest physician-level variation remains (MOR = 1.67; ICC = 3.8%). This residual variance may be interpreted as individual differences in risk tolerance or other unmeasured stable physician characteristics. The small magnitude indicates that physician decision-making is largely systematic and explainable.</p></li>
 </ul>
 <hr>
@@ -3142,8 +3135,8 @@ border: 0;
 <section id="key-findings" class="level1">
 <h1>Key Findings</h1>
 <p><strong>1. Strong appropriateness gradient exists</strong> (Table 3, Figure 2) - Odds of choosing medevac increase systematically with appropriateness - Strong evidence of appropriate clinical reasoning</p>
-<p><strong>2. Case-specific confidence drives decisions</strong> (Table 3) - OR = 6198.15 per 1-point confidence increase - Being more confident than usual on a case significantly increases medevac likelihood - Represents within-person variation, not general confidence level</p>
-<p><strong>3. Modest physician-level variation persists</strong> (Table 4) - ICC (Physician) = 3.8% after accounting for case-specific confidence, experience, and location - MOR = 1.67 - modest differences in unmeasured risk tolerance - Substantial vignette variation: ICC = 52.9%, MOR = 6.78</p>
+<p><strong>2. Case-specific confidence drives decisions</strong> (Table 3) - OR = 1.36 per 1-point confidence increase - Being more confident than usual on a case significantly increases medevac likelihood - Represents within-person variation, not general confidence level</p>
+<p><strong>3. Modest physician-level variation persists</strong> (Table 4) - ICC (Physician) = 3.8% after accounting for case-specific confidence, experience, and location - MOR = 1.67 - modest differences in unmeasured risk tolerance - Substantial vignette variation: ICC = 53.4%, MOR = 6.90</p>
 <section id="methodological-strengths" class="level2">
 <h2 class="anchored" data-anchor-id="methodological-strengths">Methodological Strengths</h2>
 <ul>
