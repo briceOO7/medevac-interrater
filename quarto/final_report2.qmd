@@ -967,15 +967,14 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 
 **Significant Predictors (p < 0.05):**
 
-- **Vignette Type**: Compared to Never Medevac (reference):
-  - Possible Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001)
-  - Always Medevac: OR = `r sprintf("%.2f", or[3])` (p < 0.001)
-- **Case-Specific Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual on a specific case increases medevac likelihood
+- **Vignette Type - Always Medevac**: OR = `r sprintf("%.2f", or[3])` (p = `r ifelse(p_values[3] < 0.001, "<0.001", sprintf("%.3f", p_values[3]))`) - Physicians are overwhelmingly more likely to choose medevac for "Always Medevac" scenarios compared to "Never Medevac" scenarios, demonstrating appropriate clinical reasoning
+- **Case-Specific Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual on a specific case significantly increases medevac likelihood
+- **Rural Experience**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Physicians with rural/regional practice experience are significantly less likely to choose medevac compared to those with referral hub experience only. This represents a 78% reduction in medevac odds, suggesting rural practice experience is associated with more conservative disposition decisions
 
 **Non-Significant Predictors (p ≥ 0.05):**
 
-- **Years of Experience**: OR = `r sprintf("%.2f", or[5])` per year (p = `r sprintf("%.3f", p_values[5])`) - Experience not significantly associated with utilization after accounting for other factors
-- **Rural Experience**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Having worked at regional/rural sites not significantly associated with medevac utilization after accounting for other factors
+- **Vignette Type - Possible Medevac**: OR = `r sprintf("%.2f", or[2])` (p = `r sprintf("%.3f", p_values[2])`) - While the odds ratio suggests increased likelihood compared to "Never Medevac" scenarios, this effect does not reach statistical significance, likely due to the heterogeneity within ambiguous scenarios and limited sample size
+- **Years of Experience**: OR = `r sprintf("%.2f", or[5])` per year (p = `r sprintf("%.3f", p_values[5])`) - Years in practice not significantly associated with medevac utilization after accounting for confidence, vignette type, and practice location
 
 ---
 
