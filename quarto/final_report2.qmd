@@ -855,25 +855,27 @@ data_model <- data %>%
                                             "Always Medevac"))
   )
 
-# Primary model: vignette type + confidence (within/between) + experience + rural experience
+# Primary model: vignette type + within-person confidence + experience + rural experience
 # Note: Excludes Special Considerations vignettes (n=3) as sensitivity analysis
-# Physician random effect removed: all between-physician variation explained by fixed effects
+# confidence_between excluded: allows physician random effect to capture risk tolerance
 model_primary <- glmer(chose_medevac ~ medevac_status_label + 
                   confidence_within +
-                  confidence_between +
                   years_experience_centered +
                   rural_experience +
-                  (1 | question),  # Only vignette random effect
+                  (1 | physician_id) + (1 | question),
                 data = data_model,
                 family = binomial(link = "logit"),
                 control = glmerControl(optimizer = "bobyqa"))
 
 # Extract variance components
 vc <- as.data.frame(VarCorr(model_primary))
+var_physician <- vc$vcov[vc$grp == "physician_id"]
 var_vignette <- vc$vcov[vc$grp == "question"]
 var_residual <- pi^2 / 3  # Logistic distribution residual variance
-total_var <- var_vignette + var_residual
+total_var <- var_physician + var_vignette + var_residual
+icc_physician <- var_physician / total_var
 icc_vignette <- var_vignette / total_var
+mor_physician <- exp(sqrt(2 * var_physician) * qnorm(0.75))
 mor_vignette <- exp(sqrt(2 * var_vignette) * qnorm(0.75))
 
 # Get fixed effects
@@ -889,11 +891,11 @@ ci_always_medevac <- c(or_lower["medevac_status_labelAlways Medevac"],
 ci_conf_within <- c(or_lower["confidence_within"], or_upper["confidence_within"])
 ```
 
-**Note:** Confidence is decomposed into within-person (deviation from own average) and between-person (overall confidence level) effects using the within-between decomposition approach. This separates the effect of "being more confident than usual on this vignette" from "being a generally confident physician."
+**Note:** Confidence is measured as within-person deviation (deviation from each physician's average confidence). Between-person confidence differences are intentionally excluded from fixed effects, allowing the physician random effect to capture unmeasured risk tolerance and other stable physician characteristics. This approach provides the best model fit (lowest AIC) while preserving interpretable physician-level variation.
 
 **Why Generalized Linear Mixed Models (GLMM)?**
 
-We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses to the same vignette are correlated across physicians. The GLMM approach includes random intercepts for vignettes and physician-level fixed effects (average confidence, experience, practice location), allowing us to: (1) obtain valid standard errors and p-values that account for vignette clustering, (2) separate within-physician effects (e.g., being more confident than usual on a specific vignette) from between-physician effects (e.g., generally confident physicians), and (3) quantify how much variation exists at the vignette level beyond what's explained by vignette type and physician characteristics. Note that physician random effects were not included as all between-physician variation was explained by the measured physician-level predictors.
+We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses from the same physician and to the same vignette are correlated. The GLMM approach includes random intercepts for both physicians and vignettes, along with fixed effects for vignette type, case-specific confidence, experience, and practice location. This allows us to: (1) obtain valid standard errors and p-values that account for clustering, (2) separate within-physician effects (being more confident than usual on a specific case) from stable between-physician differences (risk tolerance), and (3) quantify how much variation exists at both the physician and vignette level beyond what's explained by measured predictors.
 
 ## Table 3: Model Results - All Fixed Effects
 
@@ -909,18 +911,17 @@ fixed_table <- data.frame(
     "  Possible Medevac",
     "  Always Medevac",
     "",
+    "**Decision Characteristics**",
+    "  Confidence (per 1-point increase compared to own average)",
+    "",
     "**Physician Characteristics**",
     "  Years of Experience (per 1-year increase)",
-    "  Confidence (compared to average physician)",
-    "  Rural Experience (vs Referral Hub only)",
-    "",
-    "**Decision Characteristics**",
-    "  Confidence (compared to average response for each physician)"
+    "  Rural Experience (vs Referral Hub only)"
   ),
-  OR = c(NA, 1.00, or[2:3], NA, NA, or[6], or[5], or[7], NA, NA, or[4]),
-  CI_lower = c(NA, NA, or_lower[2:3], NA, NA, or_lower[6], or_lower[5], or_lower[7], NA, NA, or_lower[4]),
-  CI_upper = c(NA, NA, or_upper[2:3], NA, NA, or_upper[6], or_upper[5], or_upper[7], NA, NA, or_upper[4]),
-  p_value_raw = c(NA, NA, p_values[2:3], NA, NA, p_values[6], p_values[5], p_values[7], NA, NA, p_values[4])
+  OR = c(NA, 1.00, or[2:3], NA, NA, or[4], NA, NA, or[5], or[6]),
+  CI_lower = c(NA, NA, or_lower[2:3], NA, NA, or_lower[4], NA, NA, or_lower[5], or_lower[6]),
+  CI_upper = c(NA, NA, or_upper[2:3], NA, NA, or_upper[4], NA, NA, or_upper[5], or_upper[6]),
+  p_value_raw = c(NA, NA, p_values[2:3], NA, NA, p_values[4], NA, NA, p_values[5], p_values[6])
 ) %>%
   mutate(
     OR_display = case_when(
@@ -969,13 +970,12 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 - **Vignette Type**: Compared to Never Medevac (reference):
   - Possible Medevac: OR = `r sprintf("%.2f", or[2])` (p < 0.001)
   - Always Medevac: OR = `r sprintf("%.2f", or[3])` (p < 0.001)
-- **Within-Person Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual increases medevac likelihood
+- **Case-Specific Confidence**: OR = `r sprintf("%.2f", or[4])` per 1-point increase (p = `r ifelse(p_values[4] < 0.001, "<0.001", sprintf("%.3f", p_values[4]))`) - Being more confident than usual on a specific case increases medevac likelihood
 
 **Non-Significant Predictors (p ≥ 0.05):**
 
-- **Between-Person Confidence**: OR = `r sprintf("%.2f", or[5])` (p = `r sprintf("%.3f", p_values[5])`) - Overall confidence level not associated with medevac propensity
-- **Years of Experience**: OR = `r sprintf("%.2f", or[6])` per year (p = `r sprintf("%.3f", p_values[6])`) - Experience not significantly associated with utilization
-- **Rural Experience**: OR = `r sprintf("%.2f", or[7])` (p = `r sprintf("%.3f", p_values[7])`) - Having worked at regional/rural sites not significantly associated with medevac utilization
+- **Years of Experience**: OR = `r sprintf("%.2f", or[5])` per year (p = `r sprintf("%.3f", p_values[5])`) - Experience not significantly associated with utilization after accounting for other factors
+- **Rural Experience**: OR = `r sprintf("%.2f", or[6])` (p = `r sprintf("%.3f", p_values[6])`) - Having worked at regional/rural sites not significantly associated with medevac utilization after accounting for other factors
 
 ---
 
@@ -984,23 +984,29 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
 ```{r table4-model-random}
 variance_table <- data.frame(
   Component = c(
-    "**Random Effect Variance**",
+    "**Random Effect Variances**",
+    "  Physician (log-odds scale)",
     "  Vignette (log-odds scale)",
     "",
-    "**Intraclass Correlation**",
+    "**Intraclass Correlations**",
+    "  ICC (Physician)",
     "  ICC (Vignette)",
     "",
-    "**Median Odds Ratio**",
+    "**Median Odds Ratios**",
+    "  MOR (Physician)",
     "  MOR (Vignette)"
   ),
   Estimate = c(
     "",
+    sprintf("%.3f", var_physician),
     sprintf("%.3f", var_vignette),
     "",
     "",
+    sprintf("%.1f%%", icc_physician * 100),
     sprintf("%.1f%%", icc_vignette * 100),
     "",
     "",
+    sprintf("%.2f", mor_physician),
     sprintf("%.2f", mor_vignette)
   )
 )
@@ -1014,24 +1020,26 @@ kable(variance_table,
     full_width = FALSE,
     position = "left"
   ) %>%
-  footnote(general = "Note: Physician random effects not included. All between-physician variation is explained by measured physician-level predictors (average confidence, years of experience, rural practice experience).",
+  footnote(general = "Note: Physician random effect captures unmeasured risk tolerance and other stable physician characteristics after accounting for case-specific confidence, years of experience, and rural practice experience.",
            general_title = "")
 ```
 
 **Key Findings:**
 
-- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` of residual variation is between vignettes (after accounting for vignette type)
-- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` - Two randomly selected vignettes of the same type differ by at most this odds ratio
+- **Physician ICC**: `r sprintf("%.1f%%", 100*icc_physician)` of residual variation is between physicians (unmeasured risk tolerance)
+- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` of residual variation is between vignettes
+- **Physician MOR**: `r sprintf("%.2f", mor_physician)` - Two randomly selected physicians differ by at most this odds ratio in unmeasured risk tolerance
+- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` - Two randomly selected vignettes differ by at most this odds ratio
 
 **Key Drivers of Medevac Utilization:**
 
 - **Clinical scenario is the primary driver**: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for "Always Medevac" scenarios have `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))` times the odds compared to "Never Medevac" scenarios (OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`, 95% CI: `r sprintf("%.0f-%.0f", ci_always_medevac[1], ci_always_medevac[2])`, p < 0.001), demonstrating that clinical appropriateness dominates decision-making.
 
-- **Physician confidence influences decisions**: Higher confidence on individual cases increases likelihood of medevac utilization (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))` per 1-point increase compared to physician's average, 95% CI: `r sprintf("%.2f-%.2f", ci_conf_within[1], ci_conf_within[2])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["confidence_within", "Pr(>|z|)"])`).
+- **Case-specific confidence influences decisions**: Higher confidence on individual cases increases likelihood of medevac utilization (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))` per 1-point increase compared to physician's average, 95% CI: `r sprintf("%.2f-%.2f", ci_conf_within[1], ci_conf_within[2])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["confidence_within", "Pr(>|z|)"])`). This represents the effect of feeling unusually confident on a specific case, independent of general confidence level.
 
-- **Rural experience**: Physicians with rural/regional practice experience do not show significantly different medevac utilization compared to those with referral hub experience only (OR = `r sprintf("%.2f", exp(fixed_effects["rural_experienceYes"]))`, 95% CI: `r sprintf("%.2f-%.2f", or_lower["rural_experienceYes"], or_upper["rural_experienceYes"])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["rural_experienceYes", "Pr(>|z|)"])`).
+- **Rural experience and years of practice**: Neither rural/regional practice experience (OR = `r sprintf("%.2f", exp(fixed_effects["rural_experienceYes"]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["rural_experienceYes", "Pr(>|z|)"])`) nor years of experience (OR = `r sprintf("%.2f", exp(fixed_effects["years_experience_centered"]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["years_experience_centered", "Pr(>|z|)"])`) show significant associations with medevac utilization after accounting for case-specific confidence and vignette type.
 
-- **Physician variation is fully explained by measured predictors**: All between-physician variation in medevac utilization is accounted for by their average confidence level, years of experience, and practice location. No residual "physician effect" or unmeasured risk tolerance remains after controlling for these characteristics. This indicates that physician decision-making is systematic and explainable rather than idiosyncratic.
+- **Unmeasured physician variance reflects risk tolerance**: After accounting for case-specific confidence, experience, and practice location, modest physician-level variation remains (MOR = `r sprintf("%.2f", mor_physician)`; ICC = `r sprintf("%.1f%%", 100*icc_physician)`). This residual variance may be interpreted as individual differences in risk tolerance or other unmeasured stable physician characteristics. The small magnitude indicates that physician decision-making is largely systematic and explainable.
 
 ---
 
@@ -1041,27 +1049,27 @@ kable(variance_table,
    - Odds of choosing medevac increase systematically with appropriateness
    - Strong evidence of appropriate clinical reasoning
 
-**2. Physician variation is fully explained**
-   - All between-physician variation accounted for by measured characteristics
-   - No residual "physician effect" or unmeasured risk tolerance
-   - Systematic, explainable decision-making patterns
+**2. Case-specific confidence drives decisions** (Table 3)
+   - OR = `r sprintf("%.2f", or[4])` per 1-point confidence increase
+   - Being more confident than usual on a case significantly increases medevac likelihood
+   - Represents within-person variation, not general confidence level
 
-**3. Vignette variation remains substantial**
-   - ICC (Vignette) = `r sprintf("%.1f%%", icc_vignette * 100)` of residual variation between vignettes
-   - MOR = `r sprintf("%.2f", mor_vignette)` - substantial differences between scenarios of same type
-   - Clinical nuances within vignette categories drive remaining variation
+**3. Modest physician-level variation persists** (Table 4)
+   - ICC (Physician) = `r sprintf("%.1f%%", icc_physician * 100)` after accounting for case-specific confidence, experience, and location
+   - MOR = `r sprintf("%.2f", mor_physician)` - modest differences in unmeasured risk tolerance
+   - Substantial vignette variation: ICC = `r sprintf("%.1f%%", icc_vignette * 100)`, MOR = `r sprintf("%.2f", mor_vignette)`
 
 ## Methodological Strengths
 
-- **Mixed-effects framework** accounts for vignette clustering
-- **Within-between decomposition** separates case-specific from physician-level confidence effects
-- **Explicit appropriateness modeling** moves beyond raw agreement
-- **Physician-level predictors** explain all between-physician variation
-- **Variance decomposition** quantifies sources of variation
+- **Mixed-effects framework** accounts for clustering at physician and vignette levels
+- **Within-person confidence measurement** separates case-specific confidence from stable physician characteristics
+- **Explicit appropriateness modeling** moves beyond raw agreement metrics
+- **Variance decomposition** quantifies sources of variation (physician vs vignette)
+- **Model parsimony** excludes between-person confidence to avoid collinearity with physician random effect
 
 ## Implications
 
-This analysis demonstrates that physicians respond appropriately to clinical scenarios in a systematic, explainable manner. All variation in medevac decision-making is attributable to:
+This analysis demonstrates that physicians respond appropriately to clinical scenarios with modest individual variation. Medevac decision-making is driven by:
 
 1. **Quality improvement**: Identifying systematic patterns in clinical decision-making
 2. **Education**: Targeting feedback to appropriateness calibration

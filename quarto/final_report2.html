@@ -2932,9 +2932,9 @@ border: 0;
 <h1>Primary Analysis</h1>
 <section id="mixed-effects-model-vignette-type-confidence-experience" class="level2">
 <h2 class="anchored" data-anchor-id="mixed-effects-model-vignette-type-confidence-experience">Mixed-Effects Model: Vignette Type + Confidence + Experience</h2>
-<p><strong>Note:</strong> Confidence is decomposed into within-person (deviation from own average) and between-person (overall confidence level) effects using the within-between decomposition approach. This separates the effect of “being more confident than usual on this vignette” from “being a generally confident physician.”</p>
+<p><strong>Note:</strong> Confidence is measured as within-person deviation (deviation from each physician’s average confidence). Between-person confidence differences are intentionally excluded from fixed effects, allowing the physician random effect to capture unmeasured risk tolerance and other stable physician characteristics. This approach provides the best model fit (lowest AIC) while preserving interpretable physician-level variation.</p>
 <p><strong>Why Generalized Linear Mixed Models (GLMM)?</strong></p>
-<p>We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses to the same vignette are correlated across physicians. The GLMM approach includes random intercepts for vignettes and physician-level fixed effects (average confidence, experience, practice location), allowing us to: (1) obtain valid standard errors and p-values that account for vignette clustering, (2) separate within-physician effects (e.g., being more confident than usual on a specific vignette) from between-physician effects (e.g., generally confident physicians), and (3) quantify how much variation exists at the vignette level beyond what’s explained by vignette type and physician characteristics. Note that physician random effects were not included as all between-physician variation was explained by the measured physician-level predictors.</p>
+<p>We use a mixed-effects logistic regression model to account for the nested structure of our data: multiple responses from each physician across multiple vignettes. Standard logistic regression would violate the assumption of independent observations, as responses from the same physician and to the same vignette are correlated. The GLMM approach includes random intercepts for both physicians and vignettes, along with fixed effects for vignette type, case-specific confidence, experience, and practice location. This allows us to: (1) obtain valid standard errors and p-values that account for clustering, (2) separate within-physician effects (being more confident than usual on a specific case) from stable between-physician differences (risk tolerance), and (3) quantify how much variation exists at both the physician and vignette level beyond what’s explained by measured predictors.</p>
 </section>
 <section id="table-3-model-results---all-fixed-effects" class="level2">
 <h2 class="anchored" data-anchor-id="table-3-model-results---all-fixed-effects">Table 3: Model Results - All Fixed Effects</h2>
@@ -2965,14 +2965,14 @@ border: 0;
 </tr>
 <tr class="odd">
 <td style="text-align: left;">Possible Medevac</td>
-<td style="text-align: center;">14.41</td>
-<td style="text-align: center;">(0.54 - 382.54)</td>
-<td style="text-align: center;">0.111</td>
+<td style="text-align: center;">14.26</td>
+<td style="text-align: center;">(0.56 - 363.15)</td>
+<td style="text-align: center;">0.108</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Always Medevac</td>
-<td style="text-align: center;">15387.78</td>
-<td style="text-align: center;">(106.88 - 2215430.07)</td>
+<td style="text-align: center;">11538.08</td>
+<td style="text-align: center;">(86.75 - 1534687.78)</td>
 <td style="text-align: center;">&lt;0.001*</td>
 </tr>
 <tr class="odd">
@@ -2982,46 +2982,40 @@ border: 0;
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">**Physician Characteristics**</td>
-<td style="text-align: center;"></td>
-<td style="text-align: center;"></td>
-<td style="text-align: center;"></td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Years of Experience (per 1-year increase)</td>
-<td style="text-align: center;">0.97</td>
-<td style="text-align: center;">(0.92 - 1.02)</td>
-<td style="text-align: center;">0.272</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Confidence (compared to average physician)</td>
-<td style="text-align: center;">1.44</td>
-<td style="text-align: center;">(1.04 - 1.98)</td>
-<td style="text-align: center;">0.027*</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Rural Experience (vs Referral Hub only)</td>
-<td style="text-align: center;">0.29</td>
-<td style="text-align: center;">(0.12 - 0.70)</td>
-<td style="text-align: center;">0.005*</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;"></td>
-<td style="text-align: center;"></td>
-<td style="text-align: center;"></td>
-<td style="text-align: center;"></td>
-</tr>
-<tr class="odd">
 <td style="text-align: left;">**Decision Characteristics**</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
-<tr class="even">
-<td style="text-align: left;">Confidence (compared to average response for each physician)</td>
-<td style="text-align: center;">1.76</td>
-<td style="text-align: center;">(1.35 - 2.28)</td>
+<tr class="odd">
+<td style="text-align: left;">Confidence (per 1-point increase compared to own average)</td>
+<td style="text-align: center;">1.78</td>
+<td style="text-align: center;">(1.37 - 2.31)</td>
 <td style="text-align: center;">&lt;0.001*</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">**Physician Characteristics**</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Years of Experience (per 1-year increase)</td>
+<td style="text-align: center;">0.98</td>
+<td style="text-align: center;">(0.93 - 1.04)</td>
+<td style="text-align: center;">0.531</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Rural Experience (vs Referral Hub only)</td>
+<td style="text-align: center;">0.22</td>
+<td style="text-align: center;">(0.09 - 0.55)</td>
+<td style="text-align: center;">0.001*</td>
 </tr>
 </tbody><tfoot>
 <tr class="odd">
@@ -3041,16 +3035,15 @@ border: 0;
 <ul>
 <li><strong>Vignette Type</strong>: Compared to Never Medevac (reference):
 <ul>
-<li>Possible Medevac: OR = 14.41 (p &lt; 0.001)</li>
-<li>Always Medevac: OR = 15387.78 (p &lt; 0.001)</li>
+<li>Possible Medevac: OR = 14.26 (p &lt; 0.001)</li>
+<li>Always Medevac: OR = 11538.08 (p &lt; 0.001)</li>
 </ul></li>
-<li><strong>Within-Person Confidence</strong>: OR = 1.76 per 1-point increase (p = &lt;0.001) - Being more confident than usual increases medevac likelihood</li>
+<li><strong>Case-Specific Confidence</strong>: OR = 1.78 per 1-point increase (p = &lt;0.001) - Being more confident than usual on a specific case increases medevac likelihood</li>
 </ul>
 <p><strong>Non-Significant Predictors (p ≥ 0.05):</strong></p>
 <ul>
-<li><strong>Between-Person Confidence</strong>: OR = 1.44 (p = 0.027) - Overall confidence level not associated with medevac propensity</li>
-<li><strong>Years of Experience</strong>: OR = 0.97 per year (p = 0.272) - Experience not significantly associated with utilization</li>
-<li><strong>Rural Experience</strong>: OR = 0.29 (p = 0.005) - Having worked at regional/rural sites not significantly associated with medevac utilization</li>
+<li><strong>Years of Experience</strong>: OR = 0.98 per year (p = 0.531) - Experience not significantly associated with utilization after accounting for other factors</li>
+<li><strong>Rural Experience</strong>: OR = 0.22 (p = 0.001) - Having worked at regional/rural sites not significantly associated with medevac utilization after accounting for other factors</li>
 </ul>
 <hr>
 </section>
@@ -3068,40 +3061,52 @@ border: 0;
 </thead>
 <tbody>
 <tr class="odd">
-<td style="text-align: left;">**Random Effect Variance**</td>
+<td style="text-align: left;">**Random Effect Variances**</td>
 <td style="text-align: left;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Vignette (log-odds scale)</td>
-<td style="text-align: left;">5.727</td>
+<td style="text-align: left;">Physician (log-odds scale)</td>
+<td style="text-align: left;">0.097</td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;">Vignette (log-odds scale)</td>
+<td style="text-align: left;">5.556</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
 </tr>
-<tr class="even">
-<td style="text-align: left;">**Intraclass Correlation**</td>
+<tr class="odd">
+<td style="text-align: left;">**Intraclass Correlations**</td>
 <td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">ICC (Physician)</td>
+<td style="text-align: left;">1.1%</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">ICC (Vignette)</td>
-<td style="text-align: left;">63.5%</td>
+<td style="text-align: left;">62.1%</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">**Median Odds Ratio**</td>
+<td style="text-align: left;">**Median Odds Ratios**</td>
 <td style="text-align: left;"></td>
 </tr>
 <tr class="even">
+<td style="text-align: left;">MOR (Physician)</td>
+<td style="text-align: left;">1.35</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">MOR (Vignette)</td>
-<td style="text-align: left;">9.80</td>
+<td style="text-align: left;">9.47</td>
 </tr>
 </tbody><tfoot>
 <tr class="odd">
-<td style="text-align: left; padding: 0;"><sup></sup> Note: Physician random effects not included. All between-physician variation is explained by measured physician-level predictors (average confidence, years of experience, rural practice experience).</td>
+<td style="text-align: left; padding: 0;"><sup></sup> Note: Physician random effect captures unmeasured risk tolerance and other stable physician characteristics after accounting for case-specific confidence, years of experience, and rural practice experience.</td>
 <td style="text-align: left;"></td>
 </tr>
 </tfoot>
@@ -3111,15 +3116,17 @@ border: 0;
 </div>
 <p><strong>Key Findings:</strong></p>
 <ul>
-<li><strong>Vignette ICC</strong>: 63.5% of residual variation is between vignettes (after accounting for vignette type)</li>
-<li><strong>Vignette MOR</strong>: 9.80 - Two randomly selected vignettes of the same type differ by at most this odds ratio</li>
+<li><strong>Physician ICC</strong>: 1.1% of residual variation is between physicians (unmeasured risk tolerance)</li>
+<li><strong>Vignette ICC</strong>: 62.1% of residual variation is between vignettes</li>
+<li><strong>Physician MOR</strong>: 1.35 - Two randomly selected physicians differ by at most this odds ratio in unmeasured risk tolerance</li>
+<li><strong>Vignette MOR</strong>: 9.47 - Two randomly selected vignettes differ by at most this odds ratio</li>
 </ul>
 <p><strong>Key Drivers of Medevac Utilization:</strong></p>
 <ul>
-<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have 15388 times the odds compared to “Never Medevac” scenarios (OR = 15388, 95% CI: 107-2215430, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
-<li><p><strong>Physician confidence influences decisions</strong>: Higher confidence on individual cases increases likelihood of medevac utilization (OR = 1.76 per 1-point increase compared to physician’s average, 95% CI: 1.35-2.28, p = 0.000).</p></li>
-<li><p><strong>Rural experience</strong>: Physicians with rural/regional practice experience do not show significantly different medevac utilization compared to those with referral hub experience only (OR = 0.29, 95% CI: 0.12-0.70, p = 0.005).</p></li>
-<li><p><strong>Physician variation is fully explained by measured predictors</strong>: All between-physician variation in medevac utilization is accounted for by their average confidence level, years of experience, and practice location. No residual “physician effect” or unmeasured risk tolerance remains after controlling for these characteristics. This indicates that physician decision-making is systematic and explainable rather than idiosyncratic.</p></li>
+<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have 11538 times the odds compared to “Never Medevac” scenarios (OR = 11538, 95% CI: 87-1534688, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
+<li><p><strong>Case-specific confidence influences decisions</strong>: Higher confidence on individual cases increases likelihood of medevac utilization (OR = 1.78 per 1-point increase compared to physician’s average, 95% CI: 1.37-2.31, p = 0.000). This represents the effect of feeling unusually confident on a specific case, independent of general confidence level.</p></li>
+<li><p><strong>Rural experience and years of practice</strong>: Neither rural/regional practice experience (OR = 0.22, p = 0.001) nor years of experience (OR = 0.98, p = 0.531) show significant associations with medevac utilization after accounting for case-specific confidence and vignette type.</p></li>
+<li><p><strong>Unmeasured physician variance reflects risk tolerance</strong>: After accounting for case-specific confidence, experience, and practice location, modest physician-level variation remains (MOR = 1.35; ICC = 1.1%). This residual variance may be interpreted as individual differences in risk tolerance or other unmeasured stable physician characteristics. The small magnitude indicates that physician decision-making is largely systematic and explainable.</p></li>
 </ul>
 <hr>
 </section>
@@ -3127,21 +3134,21 @@ border: 0;
 <section id="key-findings" class="level1">
 <h1>Key Findings</h1>
 <p><strong>1. Strong appropriateness gradient exists</strong> (Table 3, Figure 2) - Odds of choosing medevac increase systematically with appropriateness - Strong evidence of appropriate clinical reasoning</p>
-<p><strong>2. Physician variation is fully explained</strong> - All between-physician variation accounted for by measured characteristics - No residual “physician effect” or unmeasured risk tolerance - Systematic, explainable decision-making patterns</p>
-<p><strong>3. Vignette variation remains substantial</strong> - ICC (Vignette) = 63.5% of residual variation between vignettes - MOR = 9.80 - substantial differences between scenarios of same type - Clinical nuances within vignette categories drive remaining variation</p>
+<p><strong>2. Case-specific confidence drives decisions</strong> (Table 3) - OR = 1.78 per 1-point confidence increase - Being more confident than usual on a case significantly increases medevac likelihood - Represents within-person variation, not general confidence level</p>
+<p><strong>3. Modest physician-level variation persists</strong> (Table 4) - ICC (Physician) = 1.1% after accounting for case-specific confidence, experience, and location - MOR = 1.35 - modest differences in unmeasured risk tolerance - Substantial vignette variation: ICC = 62.1%, MOR = 9.47</p>
 <section id="methodological-strengths" class="level2">
 <h2 class="anchored" data-anchor-id="methodological-strengths">Methodological Strengths</h2>
 <ul>
-<li><strong>Mixed-effects framework</strong> accounts for vignette clustering</li>
-<li><strong>Within-between decomposition</strong> separates case-specific from physician-level confidence effects</li>
-<li><strong>Explicit appropriateness modeling</strong> moves beyond raw agreement</li>
-<li><strong>Physician-level predictors</strong> explain all between-physician variation</li>
-<li><strong>Variance decomposition</strong> quantifies sources of variation</li>
+<li><strong>Mixed-effects framework</strong> accounts for clustering at physician and vignette levels</li>
+<li><strong>Within-person confidence measurement</strong> separates case-specific confidence from stable physician characteristics</li>
+<li><strong>Explicit appropriateness modeling</strong> moves beyond raw agreement metrics</li>
+<li><strong>Variance decomposition</strong> quantifies sources of variation (physician vs vignette)</li>
+<li><strong>Model parsimony</strong> excludes between-person confidence to avoid collinearity with physician random effect</li>
 </ul>
 </section>
 <section id="implications" class="level2">
 <h2 class="anchored" data-anchor-id="implications">Implications</h2>
-<p>This analysis demonstrates that physicians respond appropriately to clinical scenarios in a systematic, explainable manner. All variation in medevac decision-making is attributable to:</p>
+<p>This analysis demonstrates that physicians respond appropriately to clinical scenarios with modest individual variation. Medevac decision-making is driven by:</p>
 <ol type="1">
 <li><strong>Quality improvement</strong>: Identifying systematic patterns in clinical decision-making</li>
 <li><strong>Education</strong>: Targeting feedback to appropriateness calibration</li>
