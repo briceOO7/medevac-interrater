@@ -1045,7 +1045,7 @@ kable(variance_table,
 
 ---
 
-# Key Findings
+# Key Findings from GLMM
 
 **1. Clinical scenario dominates medevac decisions**
    - Physicians are 456× more likely to choose medevac for "Always" vs "Possible/Ambiguous" scenarios (OR = `r sprintf("%.0f", or[3])`, p < 0.001)
