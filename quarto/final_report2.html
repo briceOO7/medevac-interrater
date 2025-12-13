@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Medevac Interrater Study Team">
-<meta name="dcterms.date" content="2025-12-12">
+<meta name="dcterms.date" content="2025-12-13">
 
 <title>Physician Medevac Propensity Analysis</title>
 <style>
@@ -2442,7 +2442,7 @@ border: 0;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">December 12, 2025</p>
+      <p class="date">December 13, 2025</p>
     </div>
   </div>
   
@@ -3115,28 +3115,22 @@ border: 0;
 </table>
 </div>
 </div>
-<p><strong>Key Findings:</strong></p>
+<p><strong>Variance Components Summary:</strong></p>
 <ul>
-<li><strong>Physician ICC</strong>: 3.8% of residual variation is between physicians (unmeasured risk tolerance)</li>
-<li><strong>Vignette ICC</strong>: 53.4% of residual variation is between vignettes</li>
-<li><strong>Physician MOR</strong>: 1.67 - Two randomly selected physicians differ by at most this odds ratio in unmeasured risk tolerance</li>
-<li><strong>Vignette MOR</strong>: 6.90 - Two randomly selected vignettes differ by at most this odds ratio</li>
-</ul>
-<p><strong>Key Drivers of Medevac Utilization:</strong></p>
-<ul>
-<li><p><strong>Clinical scenario is the primary driver</strong>: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for “Always Medevac” scenarios have NA times the odds compared to “Never Medevac” scenarios (OR = NA, 95% CI: NA-NA, p &lt; 0.001), demonstrating that clinical appropriateness dominates decision-making.</p></li>
-<li><p><strong>Case-specific confidence influences decisions</strong>: Higher confidence on individual cases increases likelihood of medevac utilization (OR = 1.36 per 1-point increase compared to physician’s average, 95% CI: 1.13-1.64, p = 0.001). This represents the effect of feeling unusually confident on a specific case, independent of general confidence level.</p></li>
-<li><p><strong>Rural experience and years of practice</strong>: Neither rural/regional practice experience (OR = 0.37, p = 0.019) nor years of experience (OR = 0.99, p = 0.663) show significant associations with medevac utilization after accounting for case-specific confidence and vignette type.</p></li>
-<li><p><strong>Unmeasured physician variance reflects risk tolerance</strong>: After accounting for case-specific confidence, experience, and practice location, modest physician-level variation remains (MOR = 1.67; ICC = 3.8%). This residual variance may be interpreted as individual differences in risk tolerance or other unmeasured stable physician characteristics. The small magnitude indicates that physician decision-making is largely systematic and explainable.</p></li>
+<li><strong>Physician ICC</strong>: 3.8% - Modest between-physician variation</li>
+<li><strong>Vignette ICC</strong>: 53.4% - Substantial between-scenario variation</li>
+<li><strong>Physician MOR</strong>: 1.67 - Small individual differences</li>
+<li><strong>Vignette MOR</strong>: 6.90 - Large scenario-to-scenario variation</li>
 </ul>
 <hr>
 </section>
 </section>
 <section id="key-findings" class="level1">
 <h1>Key Findings</h1>
-<p><strong>1. Strong appropriateness gradient exists</strong> (Table 3, Figure 2) - Odds of choosing medevac increase systematically with appropriateness - Strong evidence of appropriate clinical reasoning</p>
-<p><strong>2. Case-specific confidence drives decisions</strong> (Table 3) - OR = 1.36 per 1-point confidence increase - Being more confident than usual on a case significantly increases medevac likelihood - Represents within-person variation, not general confidence level</p>
-<p><strong>3. Modest physician-level variation persists</strong> (Table 4) - ICC (Physician) = 3.8% after accounting for case-specific confidence, experience, and location - MOR = 1.67 - modest differences in unmeasured risk tolerance - Substantial vignette variation: ICC = 53.4%, MOR = 6.90</p>
+<p><strong>1. Clinical scenario dominates medevac decisions</strong> - Physicians are 456× more likely to choose medevac for “Always” vs “Possible/Ambiguous” scenarios (OR = 456, p &lt; 0.001) - 93% reduction in medevac likelihood for “Never” scenarios (OR = 0.07, p = 0.055, marginally NS) - Vignettes account for 53% of decision variance - clinical appropriateness is the primary driver</p>
+<p><strong>2. Rural practice experience strongly predicts conservative utilization</strong> - Physicians with rural/regional experience are 63% less likely to choose medevac (OR = 0.37, p = 0.019) - Effect persists after controlling for case-specific confidence, years of experience, and vignette type - Suggests practice setting shapes disposition decision-making patterns</p>
+<p><strong>3. Case-specific confidence influences decisions independently</strong> - Being more confident than usual on a specific case increases medevac likelihood 36% per confidence point (OR = 1.36, p = 0.001) - Represents within-person variation - not general confidence level - Confidence acts as a mediator between clinical assessment and disposition choice</p>
+<p><strong>4. Modest physician variation remains after accounting for measured factors</strong> - Physician ICC = 3.8%, MOR = 1.67 - Small but present individual differences suggest unmeasured factors (e.g., risk tolerance) - Years of experience not independently predictive (OR = 0.99, p = 0.66)</p>
 <section id="methodological-strengths" class="level2">
 <h2 class="anchored" data-anchor-id="methodological-strengths">Methodological Strengths</h2>
 <ul>

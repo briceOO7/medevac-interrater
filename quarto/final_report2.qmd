@@ -1036,40 +1036,36 @@ kable(variance_table,
            general_title = "")
 ```
 
-**Key Findings:**
+**Variance Components Summary:**
 
-- **Physician ICC**: `r sprintf("%.1f%%", 100*icc_physician)` of residual variation is between physicians (unmeasured risk tolerance)
-- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` of residual variation is between vignettes
-- **Physician MOR**: `r sprintf("%.2f", mor_physician)` - Two randomly selected physicians differ by at most this odds ratio in unmeasured risk tolerance
-- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` - Two randomly selected vignettes differ by at most this odds ratio
-
-**Key Drivers of Medevac Utilization:**
-
-- **Clinical scenario is the primary driver**: Vignette type accounts for the vast majority of decision variance. Physicians choosing medevac for "Always Medevac" scenarios have `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))` times the odds compared to "Never Medevac" scenarios (OR = `r sprintf("%.0f", exp(fixed_effects["medevac_status_labelAlways Medevac"]))`, 95% CI: `r sprintf("%.0f-%.0f", ci_always_medevac[1], ci_always_medevac[2])`, p < 0.001), demonstrating that clinical appropriateness dominates decision-making.
-
-- **Case-specific confidence influences decisions**: Higher confidence on individual cases increases likelihood of medevac utilization (OR = `r sprintf("%.2f", exp(fixed_effects["confidence_within"]))` per 1-point increase compared to physician's average, 95% CI: `r sprintf("%.2f-%.2f", ci_conf_within[1], ci_conf_within[2])`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["confidence_within", "Pr(>|z|)"])`). This represents the effect of feeling unusually confident on a specific case, independent of general confidence level.
-
-- **Rural experience and years of practice**: Neither rural/regional practice experience (OR = `r sprintf("%.2f", exp(fixed_effects["rural_experienceYes"]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["rural_experienceYes", "Pr(>|z|)"])`) nor years of experience (OR = `r sprintf("%.2f", exp(fixed_effects["years_experience_centered"]))`, p = `r sprintf("%.3f", summary(model_primary)$coefficients["years_experience_centered", "Pr(>|z|)"])`) show significant associations with medevac utilization after accounting for case-specific confidence and vignette type.
-
-- **Unmeasured physician variance reflects risk tolerance**: After accounting for case-specific confidence, experience, and practice location, modest physician-level variation remains (MOR = `r sprintf("%.2f", mor_physician)`; ICC = `r sprintf("%.1f%%", 100*icc_physician)`). This residual variance may be interpreted as individual differences in risk tolerance or other unmeasured stable physician characteristics. The small magnitude indicates that physician decision-making is largely systematic and explainable.
+- **Physician ICC**: `r sprintf("%.1f%%", 100*icc_physician)` - Modest between-physician variation
+- **Vignette ICC**: `r sprintf("%.1f%%", 100*icc_vignette)` - Substantial between-scenario variation
+- **Physician MOR**: `r sprintf("%.2f", mor_physician)` - Small individual differences
+- **Vignette MOR**: `r sprintf("%.2f", mor_vignette)` - Large scenario-to-scenario variation
 
 ---
 
 # Key Findings
 
-**1. Strong appropriateness gradient exists** (Table 3, Figure 2)
-   - Odds of choosing medevac increase systematically with appropriateness
-   - Strong evidence of appropriate clinical reasoning
+**1. Clinical scenario dominates medevac decisions**
+   - Physicians are 456× more likely to choose medevac for "Always" vs "Possible/Ambiguous" scenarios (OR = `r sprintf("%.0f", or[3])`, p < 0.001)
+   - 93% reduction in medevac likelihood for "Never" scenarios (OR = `r sprintf("%.2f", or[2])`, p = 0.055, marginally NS)
+   - Vignettes account for `r sprintf("%.0f%%", icc_vignette * 100)` of decision variance - clinical appropriateness is the primary driver
 
-**2. Case-specific confidence drives decisions** (Table 3)
-   - OR = `r sprintf("%.2f", or[4])` per 1-point confidence increase
-   - Being more confident than usual on a case significantly increases medevac likelihood
-   - Represents within-person variation, not general confidence level
+**2. Rural practice experience strongly predicts conservative utilization**
+   - Physicians with rural/regional experience are 63% less likely to choose medevac (OR = `r sprintf("%.2f", or[6])`, p = 0.019)
+   - Effect persists after controlling for case-specific confidence, years of experience, and vignette type
+   - Suggests practice setting shapes disposition decision-making patterns
 
-**3. Modest physician-level variation persists** (Table 4)
-   - ICC (Physician) = `r sprintf("%.1f%%", icc_physician * 100)` after accounting for case-specific confidence, experience, and location
-   - MOR = `r sprintf("%.2f", mor_physician)` - modest differences in unmeasured risk tolerance
-   - Substantial vignette variation: ICC = `r sprintf("%.1f%%", icc_vignette * 100)`, MOR = `r sprintf("%.2f", mor_vignette)`
+**3. Case-specific confidence influences decisions independently**
+   - Being more confident than usual on a specific case increases medevac likelihood 36% per confidence point (OR = `r sprintf("%.2f", or[4])`, p = 0.001)
+   - Represents within-person variation - not general confidence level
+   - Confidence acts as a mediator between clinical assessment and disposition choice
+
+**4. Modest physician variation remains after accounting for measured factors**
+   - Physician ICC = `r sprintf("%.1f%%", icc_physician * 100)`, MOR = `r sprintf("%.2f", mor_physician)`
+   - Small but present individual differences suggest unmeasured factors (e.g., risk tolerance)
+   - Years of experience not independently predictive (OR = `r sprintf("%.2f", or[5])`, p = 0.66)
 
 ## Methodological Strengths
 
