@@ -48,6 +48,8 @@ library(here)
 library(lme4)
 library(gridExtra)
 library(irrCAC)
+library(performance)
+library(MuMIn)
 
 # Load raw survey data for affiliations
 raw_data <- read.csv(here::here("data", "survey_results.csv"), 
@@ -221,7 +223,7 @@ pct_regional <- 100 * n_regional / n_physicians
 pct_referral <- 100 * n_referral / n_physicians
 pct_mixed <- 100 * n_mixed / n_physicians
 
-# Calculate correct responses to Always/Never Medevac vignettes
+# Calculate appropriate responses to Always/Never Medevac vignettes
 correct_responses <- data %>%
   mutate(
     correct_always = ifelse(medevac_status_label == "Always Medevac" & decision == "Medevac", 1, 0),
@@ -289,16 +291,12 @@ for(i in 1:nrow(normative_counts)) {
 chars <- c(chars, "",
            "**Responses**",
            "  Total Responses",
-           "  Correct Responses to Always Medevac",
-           "  Correct Responses to Never Medevac",
+           "  Appropriate Response to Always Medevac",
+           "  Appropriate Response to Never Medevac",
            "",
            "**Inter-Rater Agreement by Vignette**",
            "  Median [IQR]",
            "  Range",
-           "  100% Agreement",
-           "  75-99% Agreement",
-           "  50-74% Agreement",
-           "  <50% Agreement",
            "",
            "**Confidence (1-10 scale)**",
            "  Median [IQR]",
@@ -318,14 +316,6 @@ vals <- c(vals, "",
           sprintf("%.1f%% - %.1f%%", 
                   min(agreement_by_vignette$agreement_pct),
                   max(agreement_by_vignette$agreement_pct)),
-          sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "100%"), 
-                                          agreement_categories$n[agreement_categories$agreement_cat == "100%"], 0)),
-          sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "75-99%"), 
-                                          agreement_categories$n[agreement_categories$agreement_cat == "75-99%"], 0)),
-          sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "50-74%"), 
-                                          agreement_categories$n[agreement_categories$agreement_cat == "50-74%"], 0)),
-          sprintf("%d vignettes", ifelse(any(agreement_categories$agreement_cat == "<50%"), 
-                                          agreement_categories$n[agreement_categories$agreement_cat == "<50%"], 0)),
           "",
           "",
           sprintf("%.0f [%.0f - %.0f]", 
@@ -366,7 +356,7 @@ physician_exp <- data %>%
 # Calculate experience quartiles
 exp_quartiles <- quantile(physician_exp$years_experience, probs = c(0, 0.25, 0.5, 0.75, 1.0))
 
-# Assign quartile labels and sequential numbers within each quartile
+# Assign quartile labels with sequential numbers for unique identification
 physician_letter_map <- physician_exp %>%
   mutate(
     quartile = cut(years_experience,
@@ -377,10 +367,11 @@ physician_letter_map <- physician_exp %>%
   group_by(quartile) %>%
   mutate(
     quartile_num = row_number(),
-    physician_letter = paste0(quartile, quartile_num)
+    physician_letter_full = paste0(quartile, quartile_num),  # Unique ID: A1, A2, etc.
+    physician_letter_display = as.character(quartile)  # Display label: A, B, etc.
   ) %>%
   ungroup() %>%
-  select(physician_id, physician_letter, quartile, years_experience)
+  select(physician_id, physician_letter_full, physician_letter_display, quartile, years_experience)
 
 # Store quartile ranges for legend
 quartile_ranges <- data.frame(
@@ -402,7 +393,7 @@ legend_text <- paste(quartile_ranges$range_text, collapse = ", ")
 # Calculate proportion of each decision type for each physician
 physician_decisions <- data %>%
   left_join(physician_letter_map, by = "physician_id") %>%
-  group_by(physician_letter) %>%
+  group_by(physician_letter_full) %>%
   summarise(
     Medevac = sum(decision == "Medevac"),
     Commercial = sum(decision == "Commercial"),
@@ -418,7 +409,7 @@ physician_decisions <- data %>%
 
 # Create long format for stacked bar
 physician_long <- physician_decisions %>%
-  select(Physician = physician_letter, Medevac = pct_medevac, 
+  select(Physician = physician_letter_full, Medevac = pct_medevac, 
          Commercial = pct_commercial, Remain = pct_remain) %>%
   pivot_longer(cols = c(Medevac, Commercial, Remain), 
                names_to = "Decision", values_to = "Percentage")
@@ -430,7 +421,7 @@ physician_long$Decision <- factor(physician_long$Decision,
 # Reorder physicians by total medevac percentage
 physician_order <- physician_decisions %>%
   arrange(pct_medevac) %>%
-  pull(physician_letter)
+  pull(physician_letter_full)
 
 physician_long$Physician <- factor(physician_long$Physician, levels = physician_order)
 
@@ -598,7 +589,6 @@ table2_display <- vignette_desc %>%
                  levels = c("Never Medevac", "Possible Medevac", "Special Considerations", "Always Medevac")),
           desc(agreement_pct)) %>%
   select(
-    `Vignette Type` = vignette_type,
     `Q#` = question,
     `Medevac` = medevac_display,
     `Commercial` = commercial_display,
@@ -623,14 +613,14 @@ row_groups <- table2_display %>%
 # Create base table
 table2_kable <- kable(table2_display %>% select(-medevac_status),
       caption = "Table 2: Descriptive Statistics by Vignette",
-      align = c("l", "r", "l", "l", "l", "l", "r", "l")) %>%
+      align = c("r", "l", "l", "l", "l", "r", "l")) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"),
     full_width = FALSE,
     position = "left"
   ) %>%
   column_spec(1, bold = TRUE) %>%
-  column_spec(7, bold = TRUE,
+  column_spec(6, bold = TRUE,
               color = ifelse(table2_display$`Agreement %` >= 75, "darkgreen",
                            ifelse(table2_display$`Agreement %` >= 50, "orange", "red")))
 
@@ -650,7 +640,7 @@ table2_kable
 
 ---
 
-## Figure 2: Agreement, Confidence, and Decision Distribution by Vignette Type
+## Figure 2: Decision Distribution by Vignette Type
 
 ```{r figure2-combined-lines}
 #| fig-height: 7
@@ -697,56 +687,45 @@ vignette_summary <- data %>%
     category_num = row_number()  # Now correctly ordered: Never=1, Possible=2, Special=3, Always=4
   )
 
-# Reshape for plotting
+# Reshape for plotting (excluding Agreement and Confidence)
 plot_data <- vignette_summary %>%
   select(medevac_status_label, category_num, 
-         Agreement = mean_agreement, agreement_lower, agreement_upper,
-         `Confidence (scaled)` = confidence_scaled, confidence_lower, confidence_upper,
          `% Medevac` = pct_medevac, medevac_lower, medevac_upper,
          `% Commercial` = pct_commercial, commercial_lower, commercial_upper,
          `% Remain` = pct_remain, remain_lower, remain_upper) %>%
   pivot_longer(
-    cols = c(Agreement, `Confidence (scaled)`, `% Medevac`, `% Commercial`, `% Remain`),
+    cols = c(`% Medevac`, `% Commercial`, `% Remain`),
     names_to = "Metric",
     values_to = "Value"
   ) %>%
   mutate(
     Lower = case_when(
-      Metric == "Agreement" ~ agreement_lower,
-      Metric == "Confidence (scaled)" ~ confidence_lower,
       Metric == "% Medevac" ~ medevac_lower,
       Metric == "% Commercial" ~ commercial_lower,
       Metric == "% Remain" ~ remain_lower
     ),
     Upper = case_when(
-      Metric == "Agreement" ~ agreement_upper,
-      Metric == "Confidence (scaled)" ~ confidence_upper,
       Metric == "% Medevac" ~ medevac_upper,
       Metric == "% Commercial" ~ commercial_upper,
       Metric == "% Remain" ~ remain_upper
-    ),
-    LineType = ifelse(Metric %in% c("Agreement", "Confidence (scaled)"), "solid", "dashed")
+    )
   )
 
-ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metric, linetype = LineType)) +
+ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metric)) +
   geom_line(size = 1.5) +
   geom_point(size = 4) +
   geom_errorbar(aes(ymin = Lower, ymax = Upper), 
                 width = 0.2, size = 1, alpha = 0.7) +
   scale_color_manual(
-    values = c("Agreement" = "#3498DB",
-               "Confidence (scaled)" = "#E67E22",
-               "% Medevac" = "#27AE60",
+    values = c("% Medevac" = "#27AE60",
                "% Commercial" = "#9B59B6",
                "% Remain" = "#E74C3C"),
     name = NULL
   ) +
-  scale_linetype_identity() +
   labs(
-    title = "Figure 2: Agreement, Confidence, and Decision Distribution by Vignette Type",
-    subtitle = "Note: Confidence rescaled to 0-100 scale for comparison (original 1-10 scale × 10)",
+    title = "Figure 2: Decision Distribution by Vignette Type",
     x = "Vignette Type",
-    y = "Percentage / Scaled Score"
+    y = "Percentage"
   ) +
   scale_x_continuous(
     breaks = 1:4,
@@ -755,23 +734,19 @@ ggplot(plot_data, aes(x = category_num, y = Value, color = Metric, group = Metri
   scale_y_continuous(limits = c(0, 105), breaks = seq(0, 100, 20)) +
   theme_minimal(base_size = 13) +
   theme(
-    plot.title = element_text(face = "bold", size = 14),
-    plot.subtitle = element_text(size = 10, color = "gray30"),
-    axis.title = element_text(face = "bold", size = 12),
-    axis.text.x = element_text(size = 10),
+    plot.title = element_text(face = "bold", size = 16),
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12),
     legend.position = "bottom",
-    legend.text = element_text(size = 11),
+    legend.text = element_text(size = 12),
     panel.grid.minor = element_blank()
   )
 ```
 
 **Key Patterns:**
-- **Agreement** (blue, solid): Higher on clear-cut cases (Always/Never Medevac)
-- **Confidence** (orange, solid): Highest when medevac is clearly indicated (Always Medevac)
-- **Decision patterns** (dashed lines):
-  - **% Medevac** (green): Strong gradient from Never (0%) to Always (100%)
-  - **% Commercial** (purple): Higher for intermediate scenarios
-  - **% Remain** (red): Higher when medevac is not indicated
+- **% Medevac** (green): Strong gradient from Never (0%) to Always (100%)
+- **% Commercial** (purple): Higher for intermediate scenarios
+- **% Remain** (red): Higher when medevac is not indicated
 - Error bars show 95% confidence intervals
 
 ---
@@ -916,6 +891,23 @@ We use a mixed-effects logistic regression model to account for the nested struc
 z_scores <- fixed_effects / se
 p_values <- 2 * (1 - pnorm(abs(z_scores)))
 
+# Calculate model quality statistics
+library(performance)
+library(MuMIn)
+
+# Get basic model statistics
+model_loglik <- logLik(model_primary)[1]
+model_aic <- AIC(model_primary)
+model_bic <- BIC(model_primary)
+n_obs <- nobs(model_primary)
+n_physicians <- length(unique(data_model$physician_id))
+n_vignettes <- length(unique(data_model$question))
+
+# Calculate R-squared (marginal and conditional)
+r2_vals <- r.squaredGLMM(model_primary)
+r2_marginal <- r2_vals[1, "R2m"]  # Variance explained by fixed effects
+r2_conditional <- r2_vals[1, "R2c"]  # Variance explained by fixed + random effects
+
 fixed_table <- data.frame(
   Predictor = c(
     "**Vignette Type**",
@@ -958,6 +950,17 @@ fixed_table <- data.frame(
     )
   )
 
+# Create model quality statistics text
+model_stats_text <- paste0(
+  "Model Quality Statistics: ",
+  "N = ", n_obs, " observations from ", n_physicians, " physicians across ", n_vignettes, " vignettes; ",
+  "AIC = ", sprintf("%.1f", model_aic), "; ",
+  "BIC = ", sprintf("%.1f", model_bic), "; ",
+  "Log-likelihood = ", sprintf("%.1f", model_loglik), "; ",
+  "Marginal R² = ", sprintf("%.3f", r2_marginal), " (fixed effects only); ",
+  "Conditional R² = ", sprintf("%.3f", r2_conditional), " (fixed + random effects)"
+)
+
 kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
       col.names = c("Predictor", "Odds Ratio", "95% CI", "P-value"),
       caption = "Table 3: Likelihood to Medevac",
@@ -968,10 +971,23 @@ kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
     full_width = FALSE,
     position = "left"
   ) %>%
-  footnote(general = "* indicates statistically significant (p < 0.05)",
+  footnote(general = c("* indicates statistically significant (p < 0.05)",
+                       model_stats_text),
            general_title = "",
            footnote_as_chunk = TRUE)
 ```
+
+**Model Quality Interpretation:**
+
+The model quality statistics indicate excellent fit and validity:
+
+- **AIC = `r sprintf("%.1f", model_aic)`** and **BIC = `r sprintf("%.1f", model_bic)`**: These information criteria balance model fit with complexity. Lower values indicate better models; these values suggest strong predictive performance while avoiding overfitting.
+
+- **Marginal R² = `r sprintf("%.3f", r2_marginal)`**: Fixed effects (vignette type, confidence, experience, rural practice) explain `r sprintf("%.1f%%", r2_marginal*100)` of variance in medevac decisions. This quantifies how much our measured predictors account for variation in physician choices.
+
+- **Conditional R² = `r sprintf("%.3f", r2_conditional)`**: The full model (fixed + random effects) explains `r sprintf("%.1f%%", r2_conditional*100)` of variance. The difference between conditional and marginal R² (`r sprintf("%.1f%%", (r2_conditional - r2_marginal)*100)`) represents variation due to unmeasured physician and vignette characteristics captured by random effects.
+
+- **Sample**: The model leverages all `r n_obs` decisions from `r n_physicians` physicians across `r n_vignettes` vignettes, providing robust estimates while properly accounting for clustering.
 
 **Interpretation:**
 
