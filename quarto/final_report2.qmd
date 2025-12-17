@@ -356,22 +356,16 @@ physician_exp <- data %>%
 # Calculate experience quartiles
 exp_quartiles <- quantile(physician_exp$years_experience, probs = c(0, 0.25, 0.5, 0.75, 1.0))
 
-# Assign quartile labels with sequential numbers for unique identification
+# Assign sequential numbers based on experience (1 = least experienced, 20 = most experienced)
 physician_letter_map <- physician_exp %>%
   mutate(
+    experience_rank = row_number(),  # Sequential number from least to most experienced
     quartile = cut(years_experience,
                    breaks = exp_quartiles,
                    labels = c("A", "B", "C", "D"),
                    include.lowest = TRUE)
   ) %>%
-  group_by(quartile) %>%
-  mutate(
-    quartile_num = row_number(),
-    physician_letter_full = paste0(quartile, quartile_num),  # Unique ID: A1, A2, etc.
-    physician_letter_display = as.character(quartile)  # Display label: A, B, etc.
-  ) %>%
-  ungroup() %>%
-  select(physician_id, physician_letter_full, physician_letter_display, quartile, years_experience)
+  select(physician_id, experience_rank, quartile, years_experience)
 
 # Store quartile ranges for legend
 quartile_ranges <- data.frame(
@@ -393,24 +387,37 @@ legend_text <- paste(quartile_ranges$range_text, collapse = ", ")
 # Calculate proportion of each decision type for each physician
 physician_decisions <- data %>%
   left_join(physician_letter_map, by = "physician_id") %>%
-  group_by(physician_letter_full) %>%
+  group_by(physician_id, experience_rank) %>%
   summarise(
     Medevac = sum(decision == "Medevac"),
     Commercial = sum(decision == "Commercial"),
     Remain = sum(decision == "Remain"),
-    Total = n()
+    Total = n(),
+    .groups = "drop"
   ) %>%
   mutate(
     pct_medevac = 100 * Medevac / Total,
     pct_commercial = 100 * Commercial / Total,
-    pct_remain = 100 * Remain / Total
-  ) %>%
-  arrange(desc(pct_medevac))
+    pct_remain = 100 * Remain / Total,
+    quartile_label = case_when(
+      experience_rank <= 5 ~ "Least Experienced (Quartile 1)",
+      experience_rank <= 10 ~ "Lower-Middle Experienced (Quartile 2)",
+      experience_rank <= 15 ~ "Higher-Middle Experienced (Quartile 3)",
+      TRUE ~ "Most Experienced (Quartile 4)"
+    )
+  )
+
+# Within each quartile, rank physicians by medevac percentage (ascending for display)
+physician_decisions <- physician_decisions %>%
+  group_by(quartile_label) %>%
+  arrange(pct_medevac) %>%
+  mutate(within_quartile_rank = row_number()) %>%
+  ungroup()
 
 # Create long format for stacked bar
 physician_long <- physician_decisions %>%
-  select(Physician = physician_letter_full, Medevac = pct_medevac, 
-         Commercial = pct_commercial, Remain = pct_remain) %>%
+  select(physician_id, quartile_label, within_quartile_rank, 
+         Medevac = pct_medevac, Commercial = pct_commercial, Remain = pct_remain) %>%
   pivot_longer(cols = c(Medevac, Commercial, Remain), 
                names_to = "Decision", values_to = "Percentage")
 
@@ -418,17 +425,18 @@ physician_long <- physician_decisions %>%
 physician_long$Decision <- factor(physician_long$Decision,
                                   levels = c("Remain", "Commercial", "Medevac"))
 
-# Reorder physicians by total medevac percentage
-physician_order <- physician_decisions %>%
-  arrange(pct_medevac) %>%
-  pull(physician_letter_full)
+# Order quartiles
+physician_long$quartile_label <- factor(physician_long$quartile_label,
+                                        levels = c("Least Experienced (Quartile 1)", 
+                                                   "Lower-Middle Experienced (Quartile 2)", 
+                                                   "Higher-Middle Experienced (Quartile 3)", 
+                                                   "Most Experienced (Quartile 4)"))
 
-physician_long$Physician <- factor(physician_long$Physician, levels = physician_order)
-
-# Create horizontal stacked bar chart
-ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
+# Create faceted horizontal stacked bar chart (vertical stack)
+ggplot(physician_long, aes(x = factor(within_quartile_rank), y = Percentage, fill = Decision)) +
   geom_col(position = "stack", width = 0.8) +
   coord_flip() +
+  facet_wrap(~ quartile_label, ncol = 1, scales = "free_y") +
   scale_fill_manual(
     values = c("Medevac" = "#E74C3C", "Commercial" = "#3498DB", "Remain" = "#2ECC71"),
     name = "Decision",
@@ -436,9 +444,9 @@ ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
     labels = c("Medevac", "Commercial", "Remain")
   ) +
   labs(
-    title = "Figure 1: Response Distribution by Physician",
+    title = "Figure 1: Response Distribution by Physician Experience Quartile",
     y = "Proportion of Responses (%)",
-    x = "Physician",
+    x = NULL,
     fill = "Decision"
   ) +
   scale_y_continuous(labels = scales::percent_format(scale = 1),
@@ -449,15 +457,15 @@ ggplot(physician_long, aes(x = Physician, y = Percentage, fill = Decision)) +
     plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
     axis.title = element_text(size = 12, face = "bold"),
     axis.text.x = element_text(size = 10),
-    axis.text.y = element_text(size = 9, face = "bold"),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
     legend.position = "bottom",
     legend.title = element_text(size = 11, face = "bold"),
     legend.text = element_text(size = 10),
     panel.grid.major.y = element_blank(),
     panel.grid.minor = element_blank(),
-    plot.caption = element_text(size = 11, hjust = 0.5, face = "bold")
-  ) +
-  labs(caption = paste("Physician labels indicate experience quartile:", legend_text))
+    strip.text = element_text(size = 11, face = "bold")
+  )
 ```
 
 ---
