@@ -3,6 +3,7 @@ title: "Physician Medevac Propensity Analysis"
 subtitle: "Comprehensive Analysis of Clinical Appropriateness and Practice Variation"
 author: "Medevac Interrater Study Team"
 date: today
+prefer-html: true
 format:
   docx:
     toc: true
@@ -11,7 +12,6 @@ format:
     fig-width: 12
     fig-height: 8
     echo: false
-    reference-doc: null
   pdf:
     toc: true
     toc-depth: 3
@@ -59,9 +59,21 @@ library(irrCAC)
 library(performance)
 library(MuMIn)
 
+# Check output format for conditional table styling
+is_docx_output <- knitr::is_latex_output() == FALSE && knitr::is_html_output() == FALSE
+
+# Helper function for conditional table styling
+kable_format <- function(tbl, ...) {
+  if (is_docx_output) {
+    return(tbl)  # Return simple kable for DOCX
+  } else {
+    return(kable_styling(tbl, ...))  # Apply full styling for HTML/PDF
+  }
+}
+
 # Load raw survey data for affiliations
 raw_data <- read.csv(here::here("data", "survey_results.csv"), 
-                     stringsAsFactors = FALSE)
+                    stringsAsFactors = FALSE)
 
 # Load main processed data
 data <- read.csv(here::here("data", "processed", "survey_data_processed.csv"),
@@ -343,7 +355,7 @@ kable(summary_stats,
       col.names = c("Characteristic", "Value"),
       caption = "Table 1: Sample Characteristics and Study Design",
       escape = FALSE) %>%
-  kable_styling(
+  kable_format(
     bootstrap_options = c("striped", "hover", "condensed"),
     full_width = FALSE,
     position = "left"
@@ -627,24 +639,32 @@ row_groups <- table2_display %>%
   )
 
 # Create base table
-table2_kable <- kable(table2_display %>% select(-medevac_status),
-      caption = "Table 2: Descriptive Statistics by Vignette",
-      align = c("r", "l", "l", "l", "l", "r", "l")) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    full_width = FALSE,
-    position = "left"
-  ) %>%
-  column_spec(1, bold = TRUE) %>%
-  column_spec(6, bold = TRUE,
-              color = ifelse(table2_display$`Agreement %` >= 75, "darkgreen",
-                           ifelse(table2_display$`Agreement %` >= 50, "orange", "red")))
+if (is_docx_output) {
+  table2_kable <- kable(table2_display %>% select(-medevac_status),
+        caption = "Table 2: Descriptive Statistics by Vignette",
+        align = c("r", "l", "l", "l", "l", "r", "l"))
+} else {
+  table2_kable <- kable(table2_display %>% select(-medevac_status),
+        caption = "Table 2: Descriptive Statistics by Vignette",
+        align = c("r", "l", "l", "l", "l", "r", "l")) %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = FALSE,
+      position = "left"
+    ) %>%
+    column_spec(1, bold = TRUE) %>%
+    column_spec(6, bold = TRUE,
+                color = ifelse(table2_display$`Agreement %` >= 75, "darkgreen",
+                             ifelse(table2_display$`Agreement %` >= 50, "orange", "red")))
+}
 
-# Add pack_rows for each group
-for (i in 1:nrow(row_groups)) {
-  group_name <- as.character(row_groups$medevac_status[i])
-  table2_kable <- table2_kable %>%
-    pack_rows(group_name, row_groups$start[i], row_groups$end[i])
+# Add pack_rows for each group (only for HTML/PDF output)
+if (!is_docx_output) {
+  for (i in 1:nrow(row_groups)) {
+    group_name <- as.character(row_groups$medevac_status[i])
+    table2_kable <- table2_kable %>%
+      pack_rows(group_name, row_groups$start[i], row_groups$end[i])
+  }
 }
 
 table2_kable
@@ -977,20 +997,26 @@ model_stats_text <- paste0(
   "Conditional R² = ", sprintf("%.3f", r2_conditional), " (fixed + random effects)"
 )
 
-kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
+tbl3 <- kable(fixed_table %>% select(Predictor, OR_display, CI_display, p_display),
       col.names = c("Predictor", "Odds Ratio", "95% CI", "P-value"),
       caption = "Table 3: Likelihood to Medevac",
       align = c("l", "c", "c", "c"),
-      escape = FALSE) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    full_width = FALSE,
-    position = "left"
-  ) %>%
-  footnote(general = c("* indicates statistically significant (p < 0.05)",
-                       model_stats_text),
-           general_title = "",
-           footnote_as_chunk = TRUE)
+      escape = FALSE)
+
+if (is_docx_output) {
+  tbl3
+} else {
+  tbl3 %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = FALSE,
+      position = "left"
+    ) %>%
+    footnote(general = c("* indicates statistically significant (p < 0.05)",
+                         model_stats_text),
+             general_title = "",
+             footnote_as_chunk = TRUE)
+}
 ```
 
 **Model Quality Interpretation:**
@@ -1054,18 +1080,24 @@ variance_table <- data.frame(
   )
 )
 
-kable(variance_table,
+tbl4 <- kable(variance_table,
       col.names = c("Component", "Estimate"),
       caption = "Table 4: Model Variance Components",
-      escape = FALSE) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    full_width = FALSE,
-    position = "left"
-  ) %>%
-  footnote(general = c("Physician random effect captures unmeasured risk tolerance and other stable physician characteristics after accounting for case-specific confidence, years of experience, and rural practice experience.",
-                       "MOR reported as point estimates; 95% confidence intervals not computed due to computational complexity of variance component estimation in GLMMs."),
-           general_title = "")
+      escape = FALSE)
+
+if (is_docx_output) {
+  tbl4
+} else {
+  tbl4 %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = FALSE,
+      position = "left"
+    ) %>%
+    footnote(general = c("Physician random effect captures unmeasured risk tolerance and other stable physician characteristics after accounting for case-specific confidence, years of experience, and rural practice experience.",
+                         "MOR reported as point estimates; 95% confidence intervals not computed due to computational complexity of variance component estimation in GLMMs."),
+             general_title = "")
+}
 ```
 
 **Variance Components Summary:**
@@ -1122,7 +1154,7 @@ brier_text <- ifelse(brier_score < 0.1, "Excellent probability accuracy",
                      ifelse(brier_score < 0.2, "Good probability accuracy", "Moderate probability accuracy"))
 ```
 
-### Table 5: Model Predictive Performance
+### Reference Only: Model Predictive Performance
 
 ```{r table5-performance}
 # Create performance metrics table
@@ -1162,26 +1194,32 @@ performance_metrics <- data.frame(
   )
 )
 
-kable(performance_metrics,
+tbl5 <- kable(performance_metrics,
       col.names = c("Metric", "Value", "Interpretation"),
-      caption = "Table 5: Model Predictive Performance",
+      caption = "Reference Only: Model Predictive Performance",
       align = c("l", "r", "l"),
-      escape = FALSE) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    full_width = FALSE,
-    position = "left"
-  ) %>%
-  footnote(general = c(
-    "ROC AUC: Values >0.9 = excellent, 0.8-0.9 = good, 0.7-0.8 = acceptable, <0.7 = poor",
-    "Calibration intercept: Close to 0 indicates no systematic bias",
-    "Calibration slope: Close to 1 indicates well-calibrated spread of predictions",
-    "Brier score: Range 0-1, with 0 = perfect predictions"
-  ),
-  general_title = "")
+      escape = FALSE)
+
+if (is_docx_output) {
+  tbl5
+} else {
+  tbl5 %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = FALSE,
+      position = "left"
+    ) %>%
+    footnote(general = c(
+      "ROC AUC: Values >0.9 = excellent, 0.8-0.9 = good, 0.7-0.8 = acceptable, <0.7 = poor",
+      "Calibration intercept: Close to 0 indicates no systematic bias",
+      "Calibration slope: Close to 1 indicates well-calibrated spread of predictions",
+      "Brier score: Range 0-1, with 0 = perfect predictions"
+    ),
+    general_title = "")
+}
 ```
 
-### Figure 4: ROC Curve
+### Supplemental Figure 1: ROC Curve
 
 ```{r figure4-roc}
 #| fig-height: 6
@@ -1191,7 +1229,7 @@ kable(performance_metrics,
 plot(roc_obj, 
      col = "#2E86C1", 
      lwd = 2,
-     main = "Figure 4: ROC Curve - Model Discrimination",
+     main = "Supplemental Figure 1: ROC Curve - Model Discrimination",
      xlab = "False Positive Rate (1 - Specificity)",
      ylab = "True Positive Rate (Sensitivity)")
 abline(a = 0, b = 1, lty = 2, col = "gray50")
@@ -1200,7 +1238,7 @@ text(0.6, 0.2,
      cex = 1.2, col = "#2E86C1")
 ```
 
-### Figure 5: Calibration Plot
+### Supplemental Figure 2: Calibration Plot
 
 ```{r figure5-calibration}
 #| fig-height: 6
@@ -1229,7 +1267,7 @@ plot(calib_data$pred_mean, calib_data$obs_mean,
      xlim = c(0, 1), ylim = c(0, 1),
      xlab = "Predicted Probability",
      ylab = "Observed Proportion",
-     main = "Figure 5: Calibration Plot")
+     main = "Supplemental Figure 2: Calibration Plot")
 abline(a = 0, b = 1, lty = 2, col = "gray50")
 
 # Add loess smooth
